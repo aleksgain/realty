@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>reality</Name>
+  <Repository>ghcr.io/OWNER/reality:latest</Repository>
+  <Registry>https://github.com/OWNER/reality/pkgs/container/reality</Registry>
+  <Network>bridge</Network>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support/>
+  <Project>https://github.com/OWNER/reality</Project>
+  <Overview>Shared Prague property shortlist: listings pushed by n8n, star ratings and comments in SQLite, live updates in the browser.</Overview>
+  <Category>Tools: HomeAutomation:</Category>
+  <WebUI>http://[IP]:[PORT:8080]/</WebUI>
+  <TemplateURL/>
+  <Icon>https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f3e0.png</Icon>
+  <ExtraParams>--user 99:100</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <Config Name="Web UI port" Target="8080" Default="8088" Mode="tcp" Description="Port the board is served on. Point the reverse proxy here." Type="Port" Display="always" Required="true" Mask="false">8088</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/reality" Mode="rw" Description="SQLite database (ratings, comments) and the current feed.json." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/reality</Config>
+  <Config Name="Ingest token" Target="INGEST_TOKEN" Default="" Mode="" Description="Long random string. n8n sends it as 'Authorization: Bearer ...' when pushing the feed." Type="Variable" Display="always" Required="true" Mask="true"></Config>
+  <Config Name="Users" Target="USERS" Default="Alex,Partner" Mode="" Description="Comma-separated names for the 'Rating as' picker. Ignored when a user header is set." Type="Variable" Display="always" Required="false" Mask="false">Alex,Partner</Config>
+  <Config Name="SSO user header" Target="USER_HEADER" Default="" Mode="" Description="Optional, e.g. X-authentik-username. Only set this if the port is reachable solely through the proxy." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
+  <Config Name="Feed poll interval (ms)" Target="FEED_POLL_MS" Default="15000" Mode="" Description="How often to check feed.json for changes made outside the API." Type="Variable" Display="advanced" Required="false" Mask="false">15000</Config>
+</Container>

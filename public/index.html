@@ -1,0 +1,560 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Prague property watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #F5F6F4;
+  --sheet: #FFFFFF;
+  --ink: #1C2430;
+  --muted: #5E6773;
+  --line: #DCE0E5;
+  --red: #C8102E;
+  --blue: #1F4E9C;
+  --blue-soft: #E6EDF8;
+  --warn: #8A5A00;
+  --warn-bg: #FFF4DB;
+  --font: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #12171F; --sheet: #1A212B; --ink: #E7EAEE; --muted: #9AA3AE; --line: #2C3542;
+    --red: #E2354F; --blue: #7FA6E8; --blue-soft: #1F2B40; --warn: #F2C26B; --warn-bg: #3A2E14;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #12171F; --sheet: #1A212B; --ink: #E7EAEE; --muted: #9AA3AE; --line: #2C3542;
+  --red: #E2354F; --blue: #7FA6E8; --blue-soft: #1F2B40; --warn: #F2C26B; --warn-bg: #3A2E14;
+}
+*, *::before, *::after { box-sizing: border-box; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  margin: 0; background: var(--paper); color: var(--ink);
+  font-family: var(--font); font-size: 16px; line-height: 1.45;
+  font-variation-settings: "wdth" 100;
+}
+a { color: inherit; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 20px; }
+
+header.top { padding: 32px 0 20px; border-bottom: 1px solid var(--line); }
+.top h1 {
+  margin: 0; font-size: clamp(30px, 5vw, 46px); line-height: 1.02;
+  font-weight: 800; font-variation-settings: "wdth" 72; letter-spacing: -0.01em;
+}
+.top .sub { margin: 10px 0 0; color: var(--muted); max-width: 64ch; }
+.top .sub strong { color: var(--ink); font-weight: 600; }
+.top .status { margin: 10px 0 0; font-size: 14px; color: var(--muted); }
+.top .status.warn { color: var(--warn); background: var(--warn-bg); padding: 6px 10px; border-radius: 6px; display: inline-block; }
+.top .status[hidden] { display: none; }
+
+.layout { display: grid; grid-template-columns: 260px 1fr; gap: 32px; padding: 24px 0 64px; }
+@media (max-width: 860px) { .layout { grid-template-columns: 1fr; gap: 12px; } }
+
+/* filters */
+aside.filters { align-self: start; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 16px); }
+@media (max-width: 860px) { aside.filters { position: static; } }
+details.fbox > summary { display: none; }
+@media (max-width: 860px) {
+  details.fbox { background: var(--sheet); border: 1px solid var(--line); border-radius: 10px; padding: 0 14px; }
+  details.fbox > summary { display: flex; justify-content: space-between; padding: 12px 0; cursor: pointer; font-weight: 600; list-style: none; }
+  details.fbox > summary::-webkit-details-marker { display: none; }
+  details.fbox[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+}
+.fgroup { padding: 12px 0; border-bottom: 1px solid var(--line); }
+.fgroup:last-child { border-bottom: 0; }
+.fgroup h2 { font-size: 13px; font-weight: 600; color: var(--muted); margin: 0 0 8px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button, .chip {
+  border: 1px solid var(--line); background: var(--sheet); border-radius: 999px;
+  padding: 5px 11px; font-size: 14px; cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.row2 > * { min-width: 0; }
+label.field { display: block; font-size: 13px; color: var(--muted); }
+label.field input, label.field select {
+  display: block; width: 100%; margin-top: 4px; padding: 7px 9px;
+  border: 1px solid var(--line); border-radius: 7px; background: var(--sheet); font-size: 15px; min-width: 0;
+}
+label.check { display: flex; gap: 8px; align-items: center; font-size: 15px; padding: 3px 0; cursor: pointer; }
+label.check input { width: 17px; height: 17px; accent-color: var(--blue); }
+.fnote { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+
+/* results */
+.resbar { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.resbar .count { font-weight: 600; }
+.resbar .count span { color: var(--muted); font-weight: 400; }
+ol.list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+li.item {
+  display: grid; grid-template-columns: 92px 1fr auto; gap: 16px; align-items: start;
+  padding: 16px 4px; border-bottom: 1px solid var(--line);
+}
+li.item.dim { opacity: .45; }
+@media (max-width: 600px) {
+  li.item { grid-template-columns: 70px 1fr; gap: 12px; }
+  li.item .money { grid-column: 2; text-align: left; }
+}
+
+/* the Prague street-sign plaque: the one loud element */
+.plaque {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: #FFFFFF; color: #1C2430; border: 3px solid var(--red); border-radius: 5px;
+  box-shadow: inset 0 0 0 2px #FFFFFF, inset 0 0 0 3px var(--red);
+  padding: 6px 4px 5px; min-height: 64px; text-align: center; line-height: 1;
+}
+.plaque .pr { font-size: 11px; font-weight: 600; font-variation-settings: "wdth" 80; color: var(--red); }
+.plaque .num { font-size: 32px; font-weight: 800; font-variation-settings: "wdth" 70; margin-top: 2px; }
+.plaque .num.small { font-size: 15px; font-variation-settings: "wdth" 66; margin-top: 6px; }
+.plaque.blue { border-color: var(--blue); box-shadow: inset 0 0 0 2px #FFFFFF, inset 0 0 0 3px var(--blue); }
+.plaque.blue .pr { color: #1F4E9C; }
+@media (max-width: 600px) { .plaque .num { font-size: 26px; } }
+
+.main h3 { margin: 0; font-size: 19px; font-weight: 700; font-variation-settings: "wdth" 90; line-height: 1.2; }
+.main h3 a { text-decoration: none; }
+.main h3 a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.main .where { color: var(--muted); font-size: 14px; margin-top: 2px; }
+.facts { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 14px; margin-top: 6px; color: var(--muted); }
+.facts b { color: var(--ink); font-weight: 600; }
+.feat { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+.f {
+  font-size: 12.5px; padding: 2px 8px; border-radius: 4px; border: 1px solid var(--line); color: var(--muted);
+}
+.f.on { background: var(--blue-soft); border-color: transparent; color: var(--ink); }
+.f.off { text-decoration: line-through; opacity: .7; }
+.f.bonus.on { background: var(--blue); color: #fff; }
+.verify { margin-top: 9px; font-size: 13.5px; background: var(--warn-bg); color: var(--warn); padding: 6px 9px; border-radius: 6px; max-width: 70ch; }
+.tagnew { color: var(--red); font-weight: 700; font-size: 13px; margin-left: 6px; white-space: nowrap; }
+
+.money { text-align: right; white-space: nowrap; }
+.money .price { font-size: 20px; font-weight: 700; font-variation-settings: "wdth" 85; }
+.money .ppm { font-size: 13.5px; color: var(--muted); }
+.money .was { font-size: 13px; color: var(--muted); text-decoration: line-through; }
+.money .acts { display: flex; gap: 6px; justify-content: flex-end; margin-top: 10px; }
+@media (max-width: 600px) { .money .acts { justify-content: flex-start; } }
+.icon-btn {
+  border: 1px solid var(--line); background: var(--sheet); border-radius: 7px;
+  padding: 4px 9px; font-size: 13px; cursor: pointer;
+}
+.icon-btn[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+
+.empty { padding: 48px 0; color: var(--muted); max-width: 52ch; }
+.empty strong { color: var(--ink); display: block; font-size: 18px; margin-bottom: 6px; }
+.more { margin: 20px 0; }
+.more button { border: 1px solid var(--ink); background: transparent; border-radius: 8px; padding: 9px 16px; cursor: pointer; font-weight: 600; }
+.who { margin-top: 12px; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.who[hidden] { display: none; }
+.who button { border: 1px solid var(--line); background: var(--sheet); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
+.who button[aria-pressed="true"] { background: var(--ink); color: var(--paper); border-color: var(--ink); }
+.rate { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; font-size: 13.5px; color: var(--muted); }
+.stars { display: inline-flex; }
+.stars button { border: 0; background: none; padding: 0 1px; font-size: 21px; line-height: 1; cursor: pointer; color: var(--line); }
+.stars button.on { color: var(--red); }
+.stars button:disabled { cursor: default; }
+.theirs b { color: var(--red); font-weight: 600; letter-spacing: 1px; }
+.ctoggle { border: 0; background: none; padding: 0; color: var(--blue); cursor: pointer; font-size: 13.5px; text-decoration: underline; text-underline-offset: 3px; }
+.thread { margin-top: 10px; border-left: 2px solid var(--line); padding-left: 12px; max-width: 70ch; }
+.thread[hidden] { display: none; }
+.c { margin: 0 0 8px; font-size: 14.5px; }
+.c .meta { color: var(--muted); font-size: 12.5px; }
+.c .del { border: 0; background: none; color: var(--muted); cursor: pointer; font-size: 12.5px; text-decoration: underline; padding: 0 0 0 6px; }
+.thread textarea { width: 100%; min-height: 64px; padding: 8px; border: 1px solid var(--line); border-radius: 7px; background: var(--sheet); font: inherit; font-size: 14.5px; resize: vertical; }
+.thread .send { margin-top: 6px; border: 1px solid var(--ink); background: var(--ink); color: var(--paper); border-radius: 7px; padding: 6px 12px; cursor: pointer; font-size: 14px; }
+li.item.focus { box-shadow: inset 4px 0 0 var(--red); padding-left: 12px; }
+footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
+@media (prefers-reduced-motion: no-preference) { li.item { transition: opacity .2s; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Prague property watch</h1>
+    <p class="sub" id="sub">Loading listings…</p>
+    <p class="status" id="status" role="status" hidden></p>
+    <div class="who" id="who" hidden></div>
+  </header>
+
+  <div class="layout">
+    <aside class="filters">
+      <details class="fbox" id="fbox" open>
+        <summary><span>Filters</span><span id="fsum"></span></summary>
+
+        <div class="fgroup">
+          <h2>Show</h2>
+          <div class="seg" id="src">
+            <button data-v="all" aria-pressed="true">All</button>
+            <button data-v="new">New build</button>
+            <button data-v="secondary">Resale</button>
+            <button data-v="novostavby">Developer projects</button>
+          </div>
+        </div>
+
+        <div class="fgroup">
+          <h2>District</h2>
+          <div class="seg" id="dist">
+            <button data-v="Praha 7" aria-pressed="true">Praha 7</button>
+            <button data-v="Praha 6" aria-pressed="true">Praha 6</button>
+            <button data-v="Praha 8" aria-pressed="true">Praha 8</button>
+            <button data-v="other" aria-pressed="true">Elsewhere</button>
+          </div>
+        </div>
+
+        <div class="fgroup">
+          <h2>Also require</h2>
+          <label class="check"><input type="checkbox" id="reqAc"> Air conditioning</label>
+          <label class="check"><input type="checkbox" id="reqAcPrep"> Count AC prep as AC</label>
+          <label class="check"><input type="checkbox" id="reqEv"> EV charging</label>
+          <p class="fnote">Parking, outdoor space and a cellar are already required for every Sreality listing here.</p>
+        </div>
+
+        <div class="fgroup">
+          <div class="row2">
+            <label class="field">Max price (M Kč)<input type="number" id="maxPrice" min="1" step="0.5" inputmode="decimal"></label>
+            <label class="field">Min area (m²)<input type="number" id="minArea" min="0" step="5" inputmode="numeric"></label>
+          </div>
+        </div>
+
+        <div class="fgroup">
+          <label class="field">Sort by
+            <select id="sort">
+              <option value="score">Best match</option>
+              <option value="price">Price, low to high</option>
+              <option value="ppm">Price per m², low to high</option>
+              <option value="area">Area, large to small</option>
+              <option value="fresh">Newest first</option>
+              <option value="ours">Our rating</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="fgroup">
+          <label class="field">Our rating
+            <select id="rated">
+              <option value="any">Any</option>
+              <option value="unrated">Not rated yet</option>
+              <option value="3">3 stars or more</option>
+              <option value="4">4 stars or more</option>
+              <option value="commented">Has comments</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="showHidden"> Show hidden</label>
+        </div>
+      </details>
+    </aside>
+
+    <main>
+      <div class="resbar">
+        <div class="count" id="count"></div>
+      </div>
+      <ol class="list" id="list"></ol>
+      <div class="more" id="more" hidden><button type="button" id="moreBtn">Show 50 more</button></div>
+      <div class="empty" id="empty" hidden></div>
+    </main>
+  </div>
+  <footer id="foot"></footer>
+</div>
+
+<script>
+(function () {
+  const PAGE = 50;
+  const PRIORITY = ['Praha 7', 'Praha 6', 'Praha 8'];
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('reality:' + k); return v ? JSON.parse(v) : d; } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('reality:' + k, JSON.stringify(v)); } catch (e) {} },
+  };
+  const hidden = new Set(store.get('hide', []));
+  const st = Object.assign({
+    src: 'all', dist: ['Praha 7', 'Praha 6', 'Praha 8', 'other'],
+    reqAc: false, reqAcPrep: false, reqEv: false, maxPrice: 15, minArea: 50,
+    sort: 'score', rated: 'any', showHidden: false,
+  }, store.get('filters', {}));
+  let shown = PAGE, feed = null, bound = false, me = null, focusId = null, pendingRender = false;
+  let notes = new Map();                 // listingId -> {ratings: {user: stars}, comments: []}
+  const open = new Set();                // listing ids with an open comment thread
+  const drafts = new Map();              // listing id -> unsent comment text
+
+  const fmt = (n) => n == null ? '–' : Math.round(n).toLocaleString('cs-CZ');
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const daysAgo = (d) => d ? Math.floor((Date.now() - new Date(d + 'T00:00:00').getTime()) / 864e5) : 999;
+  const when = (s) => new Date(s.replace(' ', 'T') + 'Z').toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' });
+
+  function setStatus(msg, warn) { const el = $('status'); el.textContent = msg || ''; el.hidden = !msg; el.classList.toggle('warn', !!warn); }
+
+  async function api(method, url, body) {
+    const h = { 'Content-Type': 'application/json' };
+    if (me && me.user && !me.fromHeader) h['X-Reality-User'] = me.user;
+    const r = await fetch(url, { method, headers: h, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+    if (!r.ok) { let m = r.statusText; try { m = (await r.json()).error || m; } catch (e) {} throw new Error(m); }
+    return r.status === 204 ? null : r.json();
+  }
+
+  // ---------- identity ----------
+  async function loadMe() {
+    try { me = await api('GET', '/api/me'); } catch (e) { me = { user: null, users: [] }; }
+    if (!me.user) { const picked = store.get('user', null); if (picked && (!me.users.length || me.users.includes(picked))) me.user = picked; }
+    renderWho();
+  }
+  function renderWho() {
+    const box = $('who');
+    if (me.fromHeader) { box.hidden = false; box.textContent = `Signed in as ${me.user}.`; return; }
+    if (!me.users || !me.users.length) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = '<span>Rating as</span>' + me.users.map((u) => `<button type="button" data-user="${esc(u)}" aria-pressed="${me.user === u}">${esc(u)}</button>`).join('');
+  }
+  $('who').addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-user]'); if (!b) return;
+    me.user = b.dataset.user; store.set('user', me.user); renderWho(); render();
+  });
+
+  // ---------- data ----------
+  async function loadFeed(reason) {
+    try {
+      const r = await fetch('/feed.json', { cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status === 404 ? 'no feed yet' : r.statusText);
+      const data = await r.json();
+      if (!Array.isArray(data.items)) throw new Error('feed has no items');
+      applyFeed(data);
+      if (reason === 'live') setStatus(`New listings arrived ${new Date().toLocaleTimeString('cs-CZ', { timeStyle: 'short' })}.`);
+    } catch (e) {
+      if (!feed) {
+        $('sub').textContent = 'No listing data yet.';
+        showEmpty('No listings yet', 'The page fills in after the n8n workflow sends its first feed.');
+      } else setStatus('Could not load the newest listings. The current list is still shown.', true);
+    }
+  }
+  async function loadNotes() {
+    try {
+      const { ratings, comments } = await api('GET', '/api/notes');
+      const m = new Map();
+      const get = (id) => { if (!m.has(id)) m.set(id, { ratings: {}, comments: [] }); return m.get(id); };
+      for (const r of ratings) get(r.listing_id).ratings[r.user] = r.stars;
+      for (const c of comments) get(c.listing_id).comments.push(c);
+      notes = m;
+      scheduleRender();
+    } catch (e) { setStatus('Ratings and comments could not be loaded.', true); }
+  }
+  function scheduleRender() {
+    // Don't wipe a comment someone is typing; render once they leave the box.
+    if (document.activeElement && document.activeElement.tagName === 'TEXTAREA') { pendingRender = true; return; }
+    render();
+  }
+  document.addEventListener('focusout', (e) => { if (pendingRender && e.target.tagName === 'TEXTAREA') { pendingRender = false; setTimeout(render, 0); } });
+
+  function live() {
+    if (!window.EventSource) return;
+    const es = new EventSource('/api/events');
+    es.addEventListener('feed', () => loadFeed('live'));
+    es.addEventListener('notes', () => loadNotes());
+    es.onerror = () => {};  // the browser reconnects on its own
+  }
+
+  function applyFeed(data) {
+    feed = data;
+    const s = data.stats || {}, c = data.criteria || {};
+    const upd = data.updated ? new Date(data.updated).toLocaleString('cs-CZ', { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown';
+    $('sub').innerHTML = `Apartments up to <strong>${fmt((c.priceTo || 0) / 1e6)} M Kč</strong>, <strong>${c.areaFrom || '?'} m²+</strong>, finished by <strong>${esc(c.latestCompletion || '?')}</strong> for a move-in around ${esc(c.moveInDeadline || '?')}. Updated ${esc(upd)}.`;
+    $('foot').textContent = `${fmt(s.srealityMatches)} of ${fmt(s.srealityCandidates)} Sreality listings pass the hard requirements. ${fmt(s.novostavbyProjects)} developer projects from Novostavby.com are listed separately; their features are what the project page mentions, not per-unit facts.`;
+    if (!bound) { bindControls(); bound = true; }
+    scheduleRender();
+  }
+
+  // ---------- controls ----------
+  function bindControls() {
+    for (const [id, multi] of Object.entries({ src: false, dist: true })) {
+      const box = $(id);
+      const sync = () => box.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', multi ? st[id].includes(b.dataset.v) : st[id] === b.dataset.v));
+      sync();
+      box.addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        if (multi) { const v = b.dataset.v; st[id] = st[id].includes(v) ? st[id].filter((x) => x !== v) : [...st[id], v]; }
+        else st[id] = b.dataset.v;
+        sync(); changed();
+      });
+    }
+    for (const id of ['reqAc', 'reqAcPrep', 'reqEv', 'showHidden']) {
+      $(id).checked = !!st[id];
+      $(id).addEventListener('change', () => { st[id] = $(id).checked; changed(); });
+    }
+    for (const id of ['maxPrice', 'minArea']) {
+      $(id).value = st[id] ?? '';
+      $(id).addEventListener('input', () => { const v = parseFloat($(id).value); st[id] = isNaN(v) ? null : v; changed(); });
+    }
+    for (const id of ['sort', 'rated']) {
+      $(id).value = st[id];
+      $(id).addEventListener('change', () => { st[id] = $(id).value; changed(); });
+    }
+    $('moreBtn').addEventListener('click', () => { shown += PAGE; render(); });
+    $('list').addEventListener('click', onListClick);
+    $('list').addEventListener('input', (e) => { if (e.target.dataset.draft) drafts.set(e.target.dataset.draft, e.target.value); });
+    if (window.matchMedia('(max-width: 860px)').matches) $('fbox').open = false;
+  }
+  function changed() { shown = PAGE; store.set('filters', st); render(); }
+
+  async function onListClick(e) {
+    const b = e.target.closest('button'); if (!b) return;
+    const id = b.dataset.id;
+    try {
+      if (b.dataset.act === 'hide') {
+        hidden.has(id) ? hidden.delete(id) : hidden.add(id);
+        store.set('hide', [...hidden]); render();
+      } else if (b.dataset.act === 'thread') {
+        open.has(id) ? open.delete(id) : open.add(id); render();
+      } else if (b.dataset.star) {
+        if (!me.user) { setStatus('Pick who you are at the top first.', true); return; }
+        const cur = notes.get(id)?.ratings[me.user] || 0, n = Number(b.dataset.star);
+        await api('PUT', `/api/ratings/${encodeURIComponent(id)}`, { stars: cur === n ? 0 : n });
+        await loadNotes();
+      } else if (b.dataset.act === 'send') {
+        if (!me.user) { setStatus('Pick who you are at the top first.', true); return; }
+        const text = (drafts.get(id) || '').trim(); if (!text) return;
+        await api('POST', `/api/comments/${encodeURIComponent(id)}`, { text });
+        drafts.delete(id);
+        document.activeElement && document.activeElement.blur();
+        await loadNotes();
+      } else if (b.dataset.del) {
+        await api('DELETE', `/api/comments/${b.dataset.del}`);
+        await loadNotes();
+      }
+    } catch (err) { setStatus(err.message, true); }
+  }
+
+  // ---------- filtering ----------
+  const ours = (id) => { const r = notes.get(id)?.ratings || {}; const v = Object.values(r); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  function passes(it) {
+    if (it.id === focusId) return true;
+    const isNv = it.source === 'novostavby';
+    const kind = isNv ? 'novostavby' : it.market;
+    if (st.src !== 'all' && st.src !== kind) return false;
+    if (!st.dist.includes(PRIORITY.includes(it.district) ? it.district : 'other')) return false;
+    const f = it.features || {};
+    if (st.reqAc && !(f.ac === 'yes' || (st.reqAcPrep && f.ac === 'prep'))) return false;
+    if (st.reqEv && !f.ev) return false;
+    if (!isNv) {
+      if (st.maxPrice && it.price > st.maxPrice * 1e6) return false;
+      if (st.minArea && (it.area || 0) < st.minArea) return false;
+    }
+    const avg = ours(it.id);
+    if (st.rated === 'unrated' && avg != null) return false;
+    if ((st.rated === '3' || st.rated === '4') && !(avg != null && avg >= Number(st.rated))) return false;
+    if (st.rated === 'commented' && !(notes.get(it.id)?.comments.length)) return false;
+    if (!st.showHidden && hidden.has(it.id)) return false;
+    return true;
+  }
+  function sorter(a, b) {
+    const big = 9e15;
+    switch (st.sort) {
+      case 'price': return (a.price ?? big) - (b.price ?? big);
+      case 'ppm': return (a.pricePerM2 ?? big) - (b.pricePerM2 ?? big);
+      case 'area': return (b.area ?? -1) - (a.area ?? -1);
+      case 'fresh': return (b.firstSeen || '').localeCompare(a.firstSeen || '') || b.score - a.score;
+      case 'ours': return (ours(b.id) ?? -1) - (ours(a.id) ?? -1) || b.score - a.score;
+      default: return b.score - a.score || (a.pricePerM2 ?? big) - (b.pricePerM2 ?? big);
+    }
+  }
+
+  // ---------- rendering ----------
+  function plaque(d) {
+    const m = /^Praha (\d+)$/.exec(d || '');
+    if (m) return `<div class="plaque${PRIORITY.includes(d) ? '' : ' blue'}" aria-label="${esc(d)}"><span class="pr">Praha</span><span class="num">${m[1]}</span></div>`;
+    const rest = (d || 'Praha').replace(/^Praha-?\s?/, '') || 'Praha';
+    return `<div class="plaque blue" aria-label="${esc(d)}"><span class="pr">Praha</span><span class="num small">${esc(rest)}</span></div>`;
+  }
+  function feats(it) {
+    const f = it.features || {}, nv = it.source === 'novostavby';
+    const chip = (on, label, bonus) => `<span class="f${on ? ' on' : (nv ? '' : ' off')}${bonus ? ' bonus' : ''}">${label}</span>`;
+    const ac = f.ac === 'yes' ? chip(true, 'AC', true) : f.ac === 'prep' ? chip(true, 'AC prep', false) : chip(false, 'AC', true);
+    return chip(f.parking, 'Parking') + chip(f.outdoor, 'Balcony, terrace or garden') + chip(f.cellar, 'Cellar') + ac + chip(f.ev, 'EV charging', true);
+  }
+  function rating(it) {
+    const n = notes.get(it.id) || { ratings: {}, comments: [] };
+    const mine = me.user ? n.ratings[me.user] || 0 : 0;
+    const stars = [1, 2, 3, 4, 5].map((i) => `<button type="button" data-id="${esc(it.id)}" data-star="${i}" class="${i <= mine ? 'on' : ''}" aria-label="Rate ${i} of 5"${me.user ? '' : ' disabled'}>★</button>`).join('');
+    const theirs = Object.entries(n.ratings).filter(([u]) => u !== me.user)
+      .map(([u, s]) => `<span class="theirs">${esc(u)} <b>${'★'.repeat(s)}</b></span>`).join('');
+    const cnt = n.comments.length;
+    const isOpen = open.has(it.id) || it.id === focusId;
+    const thread = n.comments.map((c) => `<p class="c">${esc(c.text)}<br><span class="meta">${esc(c.user)}, ${esc(when(c.created))}</span>${me.user === c.user ? `<button type="button" class="del" data-del="${c.id}">Delete</button>` : ''}</p>`).join('');
+    return `<div class="rate"><span class="stars" role="group" aria-label="Your rating">${stars}</span>${theirs}
+        <button type="button" class="ctoggle" data-act="thread" data-id="${esc(it.id)}" aria-expanded="${isOpen}">${cnt ? `Comments (${cnt})` : 'Add a comment'}</button></div>
+      <div class="thread"${isOpen ? '' : ' hidden'}>${thread}
+        <textarea data-draft="${esc(it.id)}" placeholder="What did you think?" aria-label="Comment">${esc(drafts.get(it.id) || '')}</textarea>
+        <button type="button" class="send" data-act="send" data-id="${esc(it.id)}">Post comment</button></div>`;
+  }
+  function row(it) {
+    const nv = it.source === 'novostavby';
+    const fresh = daysAgo(it.firstSeen) <= 2;
+    const title = nv ? esc(it.title) : `${esc(it.layout)}, ${it.area ?? '?'} m²`;
+    const where = nv ? [it.subarea, it.type].filter(Boolean).join(', ') : it.subarea;
+    const facts = nv
+      ? `<span>Developer project, ${esc(it.status)}</span><span>Move-in <b>${esc(it.moveIn)}</b></span><span>Features from project page</span>`
+      : `<span>${it.market === 'new' ? 'New build' : 'Resale'}, <b>${esc(it.condition)}</b></span>` +
+        (it.readyDate ? `<span>Ready <b>${esc(it.readyDate)}</b></span>` : '') +
+        (it.floor != null ? `<span>Floor ${esc(it.floor)}</span>` : '') +
+        (it.energy ? `<span>Energy ${esc(it.energy)}</span>` : '') +
+        `<span>Seen since ${esc(it.firstSeen)}</span>`;
+    const money = nv ? `<div class="ppm">Prices on developer site</div>`
+      : `<div class="price">${fmt(it.price)} Kč</div><div class="ppm">${fmt(it.pricePerM2)} Kč/m²</div>` +
+        (it.prevPrice && it.prevPrice !== it.price ? `<div class="was">${fmt(it.prevPrice)} Kč</div>` : '');
+    const isHid = hidden.has(it.id);
+    return `<li class="item${isHid ? ' dim' : ''}${it.id === focusId ? ' focus' : ''}" id="${esc(it.id)}">
+      ${plaque(it.district)}
+      <div class="main">
+        <h3><a href="${esc(it.link)}" target="_blank" rel="noopener">${title}</a>${fresh ? '<span class="tagnew">New</span>' : ''}</h3>
+        <div class="where">${esc(where || it.district)}</div>
+        <div class="facts">${facts}</div>
+        <div class="feat">${feats(it)}</div>
+        ${it.verify ? `<div class="verify">${esc(it.verify)}</div>` : ''}
+        ${rating(it)}
+      </div>
+      <div class="money">${money}
+        <div class="acts"><button class="icon-btn" data-act="hide" data-id="${esc(it.id)}" aria-pressed="${isHid}">${isHid ? 'Hidden' : 'Hide'}</button></div>
+      </div>
+    </li>`;
+  }
+  function showEmpty(t, d) { $('empty').hidden = false; $('empty').innerHTML = `<strong>${esc(t)}</strong>${esc(d)}`; }
+
+  function render() {
+    if (!feed || !me) return;
+    const items = feed.items.filter(passes).sort(sorter);
+    if (focusId) { const i = items.findIndex((x) => x.id === focusId); if (i >= 0) { items.unshift(items.splice(i, 1)[0]); } }
+    const n = items.length;
+    $('count').innerHTML = `${fmt(n)} ${n === 1 ? 'place' : 'places'} <span>of ${fmt(feed.items.length)}</span>`;
+    $('fsum').textContent = `${fmt(n)} shown`;
+    $('list').innerHTML = items.slice(0, shown).map(row).join('');
+    $('more').hidden = n <= shown;
+    $('empty').hidden = true;
+    if (!n) showEmpty('Nothing matches these filters', 'Turn off a requirement, add a district back, or raise the price limit.');
+  }
+
+  // Telegram links land on /#<listing id>: pin that listing to the top and open its comments.
+  function readHash() {
+    const id = decodeURIComponent(location.hash.slice(1));
+    focusId = id || null;
+    if (!feed) return;
+    if (focusId && !feed.items.some((x) => x.id === focusId)) { setStatus('That listing is no longer in the feed — it was probably sold or withdrawn.', true); focusId = null; }
+    render();
+    if (focusId) { const el = document.getElementById(focusId); if (el) el.scrollIntoView({ block: 'start' }); }
+  }
+  window.addEventListener('hashchange', readHash);
+
+  (async () => {
+    await loadMe();
+    await Promise.all([loadFeed(), loadNotes()]);
+    readHash();
+    live();
+  })();
+})();
+</script>
+</body>
+</html>
