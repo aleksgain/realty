@@ -97,14 +97,46 @@ label.check input { width: 17px; height: 17px; accent-color: var(--blue); }
 .resbar .count span { color: var(--muted); font-weight: 400; }
 ol.list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 li.item {
-  display: grid; grid-template-columns: 92px 1fr auto; gap: 16px; align-items: start;
+  display: grid; grid-template-columns: 240px 1fr auto; gap: 18px; align-items: start;
   padding: 16px 4px; border-bottom: 1px solid var(--line);
 }
 li.item.dim { opacity: .45; }
-@media (max-width: 600px) {
-  li.item { grid-template-columns: 70px 1fr; gap: 12px; }
-  li.item .money { grid-column: 2; text-align: left; }
+@media (max-width: 760px) {
+  li.item { grid-template-columns: 1fr auto; gap: 10px 14px; }
+  li.item .media { grid-column: 1 / -1; }
 }
+.media { position: relative; }
+.media.noimg { width: 92px; }
+@media (max-width: 760px) { .media.noimg { width: 80px; } }
+.car {
+  display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none;
+  aspect-ratio: 4 / 3; border-radius: 8px; background: var(--line);
+}
+.car::-webkit-scrollbar { display: none; }
+.car img { flex: 0 0 100%; width: 100%; height: 100%; object-fit: cover; scroll-snap-align: start; cursor: zoom-in; display: block; }
+.media .plaque.mini { position: absolute; left: 8px; top: 8px; min-height: 0; min-width: 42px; padding: 6px 7px 5px; border-width: 2px; box-shadow: inset 0 0 0 2px #FFFFFF, inset 0 0 0 3px var(--red); pointer-events: none; }
+.media .plaque.mini.blue { box-shadow: inset 0 0 0 2px #FFFFFF, inset 0 0 0 3px var(--blue); }
+.media .plaque.mini .pr { font-size: 8.5px; }
+.media .plaque.mini .num { font-size: 20px; margin-top: 1px; }
+.media .plaque.mini .num.small { font-size: 11px; margin-top: 3px; }
+.cbtn {
+  position: absolute; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 50%;
+  border: 0; background: rgba(255,255,255,.88); color: #1C2430; cursor: pointer; display: grid; place-items: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,.25); opacity: 0; transition: opacity .15s;
+}
+.cbtn svg { width: 16px; height: 16px; }
+.cprev { left: 6px; } .cnext { right: 6px; }
+.media:hover .cbtn, .cbtn:focus-visible { opacity: 1; }
+@media (hover: none) { .cbtn { display: none; } }
+.ccount { position: absolute; right: 8px; bottom: 8px; background: rgba(0,0,0,.6); color: #fff; font-size: 12px; padding: 1px 7px; border-radius: 999px; pointer-events: none; }
+dialog#lb { border: 0; padding: 0; background: transparent; max-width: 100vw; max-height: 100vh; width: 100vw; height: 100vh; }
+dialog#lb::backdrop { background: rgba(10,12,16,.97); }
+#lb .stage { position: absolute; inset: 0; display: grid; place-items: center; padding: calc(env(safe-area-inset-top, 0px) + 48px) 12px calc(env(safe-area-inset-bottom, 0px) + 48px); }
+#lb img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 4px; touch-action: pan-y; }
+#lb .cbtn { opacity: 1; width: 44px; height: 44px; }
+#lb .cprev { left: 12px; } #lb .cnext { right: 12px; }
+#lb .lbclose { position: absolute; top: calc(env(safe-area-inset-top, 0px) + 10px); right: 12px; border: 0; background: rgba(255,255,255,.9); color: #1C2430; border-radius: 999px; padding: 6px 14px; cursor: pointer; font-size: 14px; }
+#lb .lbcount { position: absolute; bottom: calc(env(safe-area-inset-bottom, 0px) + 14px); left: 0; right: 0; text-align: center; color: #fff; font-size: 14px; }
 
 /* the Prague street-sign plaque: the one loud element */
 .plaque {
@@ -273,6 +305,13 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     </main>
   </div>
   <footer id="foot"></footer>
+  <dialog id="lb" aria-label="Photos">
+    <div class="stage"><img id="lbimg" alt=""></div>
+    <button type="button" class="cbtn cprev" id="lbprev" aria-label="Previous photo"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3 5 8l5 5"/></svg></button>
+    <button type="button" class="cbtn cnext" id="lbnext" aria-label="Next photo"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 3 5 5-5 5"/></svg></button>
+    <button type="button" class="lbclose" id="lbclose">Close</button>
+    <div class="lbcount" id="lbcount"></div>
+  </dialog>
 </div>
 
 <script>
@@ -438,12 +477,21 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     }
     $('moreBtn').addEventListener('click', () => { shown += PAGE; render(); });
     $('list').addEventListener('click', onListClick);
+    $('list').addEventListener('keydown', (e) => {
+      const car = e.target.closest && e.target.closest('.car'); if (!car) return;
+      if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); car.scrollBy({ left: (e.key === 'ArrowRight' ? 1 : -1) * car.clientWidth, behavior: 'smooth' }); }
+      if (e.key === 'Enter') { const it = feed.items.find((x) => x.id === car.dataset.id); if (it) lbOpen(it, carIndex(car)); }
+    });
     $('list').addEventListener('input', (e) => { if (e.target.dataset.draft) drafts.set(e.target.dataset.draft, e.target.value); });
     if (window.matchMedia('(max-width: 860px)').matches) $('fbox').open = false;
   }
   function refilter() { shown = PAGE; store.set('filters', st); render(); }
 
   async function onListClick(e) {
+    const img = e.target.closest('.car img');
+    if (img) { const it = feed.items.find((x) => x.id === img.closest('.car').dataset.id); if (it) lbOpen(it, Number(img.dataset.i)); return; }
+    const cb = e.target.closest('button[data-car]');
+    if (cb) { const car = cb.parentElement.querySelector('.car'); car.scrollBy({ left: Number(cb.dataset.car) * car.clientWidth, behavior: 'smooth' }); return; }
     const b = e.target.closest('button'); if (!b) return;
     const id = b.dataset.id;
     try {
@@ -519,11 +567,27 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
   }
 
   // ---------- rendering ----------
-  function plaque(d) {
-    const m = /^Praha (\d+)$/.exec(d || '');
-    if (m) return `<div class="plaque${PRIORITY.includes(d) ? '' : ' blue'}" aria-label="${esc(d)}"><span class="pr">Praha</span><span class="num">${m[1]}</span></div>`;
+  function plaque(d, mini) {
+    const m = /^Praha (\d+)$/.exec(d || ''), x = mini ? ' mini' : '';
+    if (m) return `<div class="plaque${PRIORITY.includes(d) ? '' : ' blue'}${x}" aria-label="${esc(d)}"><span class="pr">Praha</span><span class="num">${m[1]}</span></div>`;
     const rest = (d || 'Praha').replace(/^Praha-?\s?/, '') || 'Praha';
-    return `<div class="plaque blue" aria-label="${esc(d)}"><span class="pr">Praha</span><span class="num small">${esc(rest)}</span></div>`;
+    return `<div class="plaque blue${x}" aria-label="${esc(d)}"><span class="pr">Praha</span><span class="num small">${esc(rest)}</span></div>`;
+  }
+  const CHEV_L = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3 5 8l5 5"/></svg>';
+  const CHEV_R = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 3 5 5-5 5"/></svg>';
+  const carIdx = new Map();   // listing id -> photo index, so live re-renders keep your place
+  function media(it) {
+    const imgs = it.images || [];
+    if (!imgs.length) return `<div class="media noimg">${plaque(it.district)}</div>`;
+    const many = imgs.length > 1;
+    return `<div class="media" data-id="${esc(it.id)}">
+      <div class="car" data-id="${esc(it.id)}" tabindex="0" aria-label="Photos, ${imgs.length}">
+        ${imgs.map((im, i) => `<img src="${esc(im.t)}" data-i="${i}" alt="Photo ${i + 1} of ${imgs.length}" loading="lazy" decoding="async" referrerpolicy="no-referrer">`).join('')}
+      </div>
+      ${plaque(it.district, true)}
+      ${many ? `<button type="button" class="cbtn cprev" data-car="-1" aria-label="Previous photo">${CHEV_L}</button><button type="button" class="cbtn cnext" data-car="1" aria-label="Next photo">${CHEV_R}</button>` : ''}
+      ${many ? `<span class="ccount">${(carIdx.get(it.id) || 0) + 1} / ${imgs.length}</span>` : ''}
+    </div>`;
   }
   function feats(it) {
     const f = it.features || {}, nv = it.source === 'novostavby';
@@ -574,7 +638,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
         (it.prevPrice && it.prevPrice !== it.price ? `<div class="was">${fmt(it.prevPrice)} Kč</div>` : '');
     const isHid = hidden.has(it.id);
     return `<li class="item${isHid ? ' dim' : ''}${it.id === focusId ? ' focus' : ''}" id="${esc(it.id)}">
-      ${plaque(it.district)}
+      ${media(it)}
       <div class="main">
         <h3><a href="${esc(it.link)}" target="_blank" rel="noopener">${title}</a>${tag ? `<span class="chg">${tag}</span>` : ''}</h3>
         <div class="where">${esc(where || it.district)}</div>
@@ -590,6 +654,43 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
       </div>
     </li>`;
   }
+  // ---------- photos ----------
+  function carIndex(car) { return Math.round(car.scrollLeft / Math.max(1, car.clientWidth)); }
+  document.addEventListener('scroll', (e) => {
+    const car = e.target; if (!(car instanceof Element) || !car.classList.contains('car')) return;
+    const i = carIndex(car), id = car.dataset.id;
+    carIdx.set(id, i);
+    const cnt = car.parentElement.querySelector('.ccount');
+    if (cnt) cnt.textContent = `${i + 1} / ${car.children.length}`;
+  }, true);
+  document.addEventListener('error', (e) => {
+    const img = e.target; if (!(img instanceof HTMLImageElement)) return;
+    const car = img.closest('.car'); if (!car) return;
+    img.remove();
+    if (!car.children.length) { const m = car.parentElement; m.classList.add('noimg'); m.innerHTML = plaque(feed.items.find((x) => x.id === m.dataset.id)?.district); }
+  }, true);
+  function restoreCarousels() {
+    document.querySelectorAll('.car').forEach((car) => { const i = carIdx.get(car.dataset.id); if (i) car.scrollLeft = i * car.clientWidth; });
+  }
+
+  const lb = { el: $('lb'), item: null, i: 0 };
+  function lbShow() {
+    const imgs = lb.item.images; lb.i = (lb.i + imgs.length) % imgs.length;
+    $('lbimg').src = imgs[lb.i].f; $('lbimg').alt = `Photo ${lb.i + 1} of ${imgs.length}`;
+    $('lbcount').textContent = `${lb.i + 1} / ${imgs.length}`;
+    $('lbprev').hidden = $('lbnext').hidden = imgs.length < 2;
+    const next = imgs[(lb.i + 1) % imgs.length]; if (next) new Image().src = next.f;   // preload the next one
+  }
+  function lbOpen(item, i) { lb.item = item; lb.i = i; lbShow(); if (typeof lb.el.showModal === 'function') lb.el.showModal(); else window.open(item.images[i].f, '_blank'); }
+  $('lbprev').addEventListener('click', () => { lb.i--; lbShow(); });
+  $('lbnext').addEventListener('click', () => { lb.i++; lbShow(); });
+  $('lbclose').addEventListener('click', () => lb.el.close());
+  lb.el.addEventListener('click', (e) => { if (e.target === lb.el || e.target.classList.contains('stage')) lb.el.close(); });
+  lb.el.addEventListener('keydown', (e) => { if (e.key === 'ArrowLeft') { lb.i--; lbShow(); } if (e.key === 'ArrowRight') { lb.i++; lbShow(); } });
+  let swipeX = null;
+  $('lbimg').addEventListener('pointerdown', (e) => { swipeX = e.clientX; });
+  $('lbimg').addEventListener('pointerup', (e) => { if (swipeX == null) return; const dx = e.clientX - swipeX; swipeX = null; if (Math.abs(dx) > 40) { lb.i += dx < 0 ? 1 : -1; lbShow(); } });
+
   function showEmpty(t, d) { $('empty').hidden = false; $('empty').innerHTML = `<strong>${esc(t)}</strong>${esc(d)}`; }
 
   function render() {
@@ -601,6 +702,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     $('fsum').textContent = `${fmt(n)} shown`;
     $('chgCount').textContent = `(${feed.items.filter(changed).length})`;
     $('list').innerHTML = items.slice(0, shown).map(row).join('');
+    requestAnimationFrame(restoreCarousels);
     $('more').hidden = n <= shown;
     $('empty').hidden = true;
     if (!n) showEmpty('Nothing matches these filters', 'Turn off a requirement, add a district back, or raise the price limit.');

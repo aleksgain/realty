@@ -126,7 +126,7 @@ async function runUpdate(trigger) {
     tx(() => {
       for (const [hash, c] of cands) {
         const id = `sr-${hash}`, row = q.listing.get(id);
-        const upgrade = row && JSON.parse(row.data).v !== 2;   // older rows lack GPS needed for duplicate matching
+        const upgrade = row && JSON.parse(row.data).v !== 3;   // older rows lack GPS (duplicate matching) or photos
         const stale = row && (upgrade || ((!row.last_eval || row.last_eval < staleBefore) && reeval < cfg.sreality.reevaluatePerRun));
         if (row && row.price === c.e.price_czk && !stale) {
           if (!row.active) q.event.run(id, now, 'back', null);
@@ -289,6 +289,7 @@ function buildFeed() {
       ids: group.map((g) => g.id),
       sources: group.map((g) => ({ id: g.id, source: g.source, link: g.link, price: g.price, developer: g.developer || null })),
       readyDate: group.map((g) => g.readyDate).find(Boolean) || null,
+      images: (group.find((g) => g.images?.length) || {}).images || [],
       verify: group.map((g) => g.verify).find(Boolean) || null,
       score: Math.max(...group.map((g) => scoreOf({ ...g, features }))),
       firstSeen: main.firstSeen.slice(0, 10),
