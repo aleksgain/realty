@@ -152,6 +152,15 @@ li.item.dim { opacity: .45; }
 .empty strong { color: var(--ink); display: block; font-size: 18px; margin-bottom: 6px; }
 .more { margin: 20px 0; }
 .more button { border: 1px solid var(--ink); background: transparent; border-radius: 8px; padding: 9px 16px; cursor: pointer; font-weight: 600; }
+.runbar { margin-top: 12px; font-size: 14px; color: var(--muted); display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.runbar[hidden] { display: none; }
+.runbar.bad { color: var(--warn); }
+.runbar button { border: 1px solid var(--line); background: var(--sheet); border-radius: 7px; padding: 4px 10px; cursor: pointer; font-size: 13.5px; }
+.runbar button:disabled { opacity: .5; cursor: default; }
+.chg { color: var(--red); font-weight: 700; font-size: 13px; margin-left: 6px; white-space: nowrap; }
+.hist { font-size: 13px; color: var(--muted); margin-top: 6px; }
+.srcs { font-size: 13.5px; margin-top: 6px; color: var(--muted); }
+.srcs a { color: var(--blue); }
 .who { margin-top: 12px; font-size: 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .who[hidden] { display: none; }
 .who button { border: 1px solid var(--line); background: var(--sheet); border-radius: 999px; padding: 4px 11px; cursor: pointer; }
@@ -181,6 +190,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     <h1>Prague property watch</h1>
     <p class="sub" id="sub">Loading listings…</p>
     <p class="status" id="status" role="status" hidden></p>
+    <div class="runbar" id="runbar" hidden><span id="runtext"></span><button type="button" id="runBtn">Check now</button></div>
     <div class="who" id="who" hidden></div>
   </header>
 
@@ -214,7 +224,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
           <label class="check"><input type="checkbox" id="reqAc"> Air conditioning</label>
           <label class="check"><input type="checkbox" id="reqAcPrep"> Count AC prep as AC</label>
           <label class="check"><input type="checkbox" id="reqEv"> EV charging</label>
-          <p class="fnote">Parking, outdoor space and a cellar are already required for every Sreality listing here.</p>
+          <p class="fnote">Parking, outdoor space and a cellar are already required for every flat listed here.</p>
         </div>
 
         <div class="fgroup">
@@ -247,6 +257,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
               <option value="commented">Has comments</option>
             </select>
           </label>
+          <label class="check"><input type="checkbox" id="onlyChanged"> Changed since my last visit <span id="chgCount"></span></label>
           <label class="check"><input type="checkbox" id="showHidden"> Show hidden</label>
         </div>
       </details>
@@ -277,17 +288,20 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
   const st = Object.assign({
     src: 'all', dist: ['Praha 7', 'Praha 6', 'Praha 8', 'other'],
     reqAc: false, reqAcPrep: false, reqEv: false, maxPrice: 15, minArea: 50,
-    sort: 'score', rated: 'any', showHidden: false,
+    sort: 'score', rated: 'any', showHidden: false, onlyChanged: false,
   }, store.get('filters', {}));
-  let shown = PAGE, feed = null, bound = false, me = null, focusId = null, pendingRender = false;
+  let shown = PAGE, feed = null, bound = false, me = null, focusId = null, pendingRender = false, runState = null;
+  // "What's new" baseline: the previous visit in this browser. Before any visit, the last 3 days count as new.
+  const prevVisit = store.get('lastVisit', new Date(Date.now() - 3 * 864e5).toISOString());
+  store.set('lastVisit', new Date().toISOString());
+  const changed = (it) => (it.changedAt || '') > prevVisit;
   let notes = new Map();                 // listingId -> {ratings: {user: stars}, comments: []}
   const open = new Set();                // listing ids with an open comment thread
   const drafts = new Map();              // listing id -> unsent comment text
 
   const fmt = (n) => n == null ? '–' : Math.round(n).toLocaleString('cs-CZ');
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const daysAgo = (d) => d ? Math.floor((Date.now() - new Date(d + 'T00:00:00').getTime()) / 864e5) : 999;
-  const when = (s) => new Date(s.replace(' ', 'T') + 'Z').toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' });
+    const when = (s) => new Date(s.replace(' ', 'T') + 'Z').toLocaleString('cs-CZ', { dateStyle: 'short', timeStyle: 'short' });
 
   function setStatus(msg, warn) { const el = $('status'); el.textContent = msg || ''; el.hidden = !msg; el.classList.toggle('warn', !!warn); }
 
@@ -320,16 +334,16 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
   // ---------- data ----------
   async function loadFeed(reason) {
     try {
-      const r = await fetch('/feed.json', { cache: 'no-store' });
+      const r = await fetch('/api/feed', { cache: 'no-store' });
       if (!r.ok) throw new Error(r.status === 404 ? 'no feed yet' : r.statusText);
       const data = await r.json();
       if (!Array.isArray(data.items)) throw new Error('feed has no items');
       applyFeed(data);
-      if (reason === 'live') setStatus(`New listings arrived ${new Date().toLocaleTimeString('cs-CZ', { timeStyle: 'short' })}.`);
+      
     } catch (e) {
       if (!feed) {
         $('sub').textContent = 'No listing data yet.';
-        showEmpty('No listings yet', 'The page fills in after the n8n workflow sends its first feed.');
+        showEmpty('No listings yet', 'The first check runs a few seconds after the container starts and takes about three minutes.');
       } else setStatus('Could not load the newest listings. The current list is still shown.', true);
     }
   }
@@ -356,15 +370,43 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     const es = new EventSource('/api/events');
     es.addEventListener('feed', () => loadFeed('live'));
     es.addEventListener('notes', () => loadNotes());
+    es.addEventListener('run', (e) => { try { runState = JSON.parse(e.data); renderRun(); } catch (err) {} });
     es.onerror = () => {};  // the browser reconnects on its own
   }
+
+  const fmtWhen = (iso) => {
+    if (!iso) return '?';
+    const d = new Date(iso), today = new Date().toDateString() === d.toDateString();
+    return today ? d.toLocaleTimeString('cs-CZ', { timeStyle: 'short' }) : d.toLocaleString('cs-CZ', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
+  };
+  function renderRun() {
+    const s = runState; if (!s) return;
+    const bar = $('runbar'), txt = $('runtext'), btn = $('runBtn');
+    bar.hidden = false;
+    bar.classList.toggle('bad', !!(s.lastRun && !s.lastRun.ok && !s.running));
+    if (s.running) { txt.textContent = `Checking for updates: ${s.running.phase}…`; btn.disabled = true; return; }
+    btn.disabled = false;
+    const parts = [];
+    if (s.lastRun && !s.lastRun.ok) parts.push(`Last check failed at ${fmtWhen(s.lastRun.finished)} (${s.lastRun.error}).`);
+    if (s.lastOk) {
+      const st = s.lastOk.stats || {};
+      const bits = [st.new ? `${st.new} new` : null, st.priceChanges ? `${st.priceChanges} price changes` : null, st.gone ? `${st.gone} gone` : null].filter(Boolean);
+      parts.push(`Last checked ${fmtWhen(s.lastOk.finished)}${bits.length ? ': ' + bits.join(', ') : ', nothing changed'}.`);
+    } else if (!s.lastRun) parts.push('Not checked yet.');
+    if (s.nextRun) parts.push(`Next check ${fmtWhen(s.nextRun)}.`);
+    txt.textContent = parts.join(' ');
+  }
+  $('runBtn').addEventListener('click', async () => {
+    if (!me || !me.user) { setStatus('Pick who you are first.', true); return; }
+    try { await api('POST', '/api/run'); setStatus(''); } catch (e) { setStatus(e.message, true); }
+  });
 
   function applyFeed(data) {
     feed = data;
     const s = data.stats || {}, c = data.criteria || {};
     const upd = data.updated ? new Date(data.updated).toLocaleString('cs-CZ', { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown';
     $('sub').innerHTML = `Apartments up to <strong>${fmt((c.priceTo || 0) / 1e6)} M Kč</strong>, <strong>${c.areaFrom || '?'} m²+</strong>, finished by <strong>${esc(c.latestCompletion || '?')}</strong> for a move-in around ${esc(c.moveInDeadline || '?')}. Updated ${esc(upd)}.`;
-    $('foot').textContent = `${fmt(s.srealityMatches)} of ${fmt(s.srealityCandidates)} Sreality listings pass the hard requirements. ${fmt(s.novostavbyProjects)} developer projects from Novostavby.com are listed separately; their features are what the project page mentions, not per-unit facts.`;
+    $('foot').textContent = `${fmt(s.flatzoneMatches)} of ${fmt(s.flatzoneUnits)} units from developer price lists (Flatzone) and ${fmt(s.srealityMatches)} of ${fmt(s.srealityCandidates)} Sreality listings pass the requirements; ${fmt(s.duplicatesMerged)} duplicates were merged. ${fmt(s.novostavbyProjects)} Novostavby.com projects not covered by Flatzone are listed as whole projects; their features are what the project page mentions.`;
     if (!bound) { bindControls(); bound = true; }
     scheduleRender();
   }
@@ -379,27 +421,27 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
         const b = e.target.closest('button'); if (!b) return;
         if (multi) { const v = b.dataset.v; st[id] = st[id].includes(v) ? st[id].filter((x) => x !== v) : [...st[id], v]; }
         else st[id] = b.dataset.v;
-        sync(); changed();
+        sync(); refilter();
       });
     }
-    for (const id of ['reqAc', 'reqAcPrep', 'reqEv', 'showHidden']) {
+    for (const id of ['reqAc', 'reqAcPrep', 'reqEv', 'showHidden', 'onlyChanged']) {
       $(id).checked = !!st[id];
-      $(id).addEventListener('change', () => { st[id] = $(id).checked; changed(); });
+      $(id).addEventListener('change', () => { st[id] = $(id).checked; refilter(); });
     }
     for (const id of ['maxPrice', 'minArea']) {
       $(id).value = st[id] ?? '';
-      $(id).addEventListener('input', () => { const v = parseFloat($(id).value); st[id] = isNaN(v) ? null : v; changed(); });
+      $(id).addEventListener('input', () => { const v = parseFloat($(id).value); st[id] = isNaN(v) ? null : v; refilter(); });
     }
     for (const id of ['sort', 'rated']) {
       $(id).value = st[id];
-      $(id).addEventListener('change', () => { st[id] = $(id).value; changed(); });
+      $(id).addEventListener('change', () => { st[id] = $(id).value; refilter(); });
     }
     $('moreBtn').addEventListener('click', () => { shown += PAGE; render(); });
     $('list').addEventListener('click', onListClick);
     $('list').addEventListener('input', (e) => { if (e.target.dataset.draft) drafts.set(e.target.dataset.draft, e.target.value); });
     if (window.matchMedia('(max-width: 860px)').matches) $('fbox').open = false;
   }
-  function changed() { shown = PAGE; store.set('filters', st); render(); }
+  function refilter() { shown = PAGE; store.set('filters', st); render(); }
 
   async function onListClick(e) {
     const b = e.target.closest('button'); if (!b) return;
@@ -412,7 +454,8 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
         open.has(id) ? open.delete(id) : open.add(id); render();
       } else if (b.dataset.star) {
         if (!me.user) { setStatus('Pick who you are at the top first.', true); return; }
-        const cur = notes.get(id)?.ratings[me.user] || 0, n = Number(b.dataset.star);
+        const item = feed.items.find((x) => x.id === id);
+        const cur = (item ? notesFor(item).ratings[me.user] : 0) || 0, n = Number(b.dataset.star);
         await api('PUT', `/api/ratings/${encodeURIComponent(id)}`, { stars: cur === n ? 0 : n });
         await loadNotes();
       } else if (b.dataset.act === 'send') {
@@ -430,7 +473,18 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
   }
 
   // ---------- filtering ----------
-  const ours = (id) => { const r = notes.get(id)?.ratings || {}; const v = Object.values(r); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  // A merged listing carries several ids; ratings and comments made on any of them belong to it.
+  function notesFor(it) {
+    const ratings = {}, comments = [];
+    for (const id of it.ids || [it.id]) {
+      const n = notes.get(id); if (!n) continue;
+      for (const [u, s] of Object.entries(n.ratings)) if (!(u in ratings) || id === it.id) ratings[u] = s;
+      comments.push(...n.comments);
+    }
+    comments.sort((a, b) => a.id - b.id);
+    return { ratings, comments };
+  }
+  const ours = (it) => { const v = Object.values(notesFor(it).ratings); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
   function passes(it) {
     if (it.id === focusId) return true;
     const isNv = it.source === 'novostavby';
@@ -444,10 +498,11 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
       if (st.maxPrice && it.price > st.maxPrice * 1e6) return false;
       if (st.minArea && (it.area || 0) < st.minArea) return false;
     }
-    const avg = ours(it.id);
+    const avg = ours(it);
     if (st.rated === 'unrated' && avg != null) return false;
     if ((st.rated === '3' || st.rated === '4') && !(avg != null && avg >= Number(st.rated))) return false;
-    if (st.rated === 'commented' && !(notes.get(it.id)?.comments.length)) return false;
+    if (st.rated === 'commented' && !notesFor(it).comments.length) return false;
+    if (st.onlyChanged && !changed(it)) return false;
     if (!st.showHidden && hidden.has(it.id)) return false;
     return true;
   }
@@ -458,7 +513,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
       case 'ppm': return (a.pricePerM2 ?? big) - (b.pricePerM2 ?? big);
       case 'area': return (b.area ?? -1) - (a.area ?? -1);
       case 'fresh': return (b.firstSeen || '').localeCompare(a.firstSeen || '') || b.score - a.score;
-      case 'ours': return (ours(b.id) ?? -1) - (ours(a.id) ?? -1) || b.score - a.score;
+      case 'ours': return (ours(b) ?? -1) - (ours(a) ?? -1) || b.score - a.score;
       default: return b.score - a.score || (a.pricePerM2 ?? big) - (b.pricePerM2 ?? big);
     }
   }
@@ -477,7 +532,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     return chip(f.parking, 'Parking') + chip(f.outdoor, 'Balcony, terrace or garden') + chip(f.cellar, 'Cellar') + ac + chip(f.ev, 'EV charging', true);
   }
   function rating(it) {
-    const n = notes.get(it.id) || { ratings: {}, comments: [] };
+    const n = notesFor(it);
     const mine = me.user ? n.ratings[me.user] || 0 : 0;
     const stars = [1, 2, 3, 4, 5].map((i) => `<button type="button" data-id="${esc(it.id)}" data-star="${i}" class="${i <= mine ? 'on' : ''}" aria-label="Rate ${i} of 5"${me.user ? '' : ' disabled'}>★</button>`).join('');
     const theirs = Object.entries(n.ratings).filter(([u]) => u !== me.user)
@@ -493,12 +548,23 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
   }
   function row(it) {
     const nv = it.source === 'novostavby';
-    const fresh = daysAgo(it.firstSeen) <= 2;
+    const last = (it.history || []).filter((e) => e.kind !== 'gone').slice(-1)[0];
+    const tag = !changed(it) || !last ? '' : last.kind === 'price' ? (last.to < last.from ? 'Price down' : 'Price up') : last.kind === 'status' ? 'Updated' : last.kind === 'back' ? 'Back on market' : 'New';
+    const priceHist = (it.history || []).filter((e) => e.kind === 'price').slice(-3)
+      .map((e) => `${fmt(e.from)} → ${fmt(e.to)} Kč on ${new Date(e.at).toLocaleDateString('cs-CZ')}`);
+    const statusHist = (it.history || []).filter((e) => e.kind === 'status').slice(-1)
+      .map((e) => `Was ${e.from} until ${new Date(e.at).toLocaleDateString('cs-CZ')}`);
+    const hist = [...priceHist, ...statusHist];
+    const fz = it.source === 'flatzone';
     const title = nv ? esc(it.title) : `${esc(it.layout)}, ${it.area ?? '?'} m²`;
-    const where = nv ? [it.subarea, it.type].filter(Boolean).join(', ') : it.subarea;
+    const where = nv ? [it.subarea, it.type].filter(Boolean).join(', ') : fz ? [it.project, it.subarea].filter(Boolean).join(', ') : it.subarea;
+    const SRC = { flatzone: 'Developer site', sreality: 'Sreality', novostavby: 'Novostavby.com' };
+    const srcs = (it.sources || []).length > 1 || fz
+      ? `<div class="srcs">Listed on ${(it.sources || []).map((s) => `<a href="${esc(s.link)}" target="_blank" rel="noopener">${SRC[s.source] || s.source}</a>${s.price ? ` (${fmt(s.price)} Kč)` : ''}`).join(', ')}</div>` : '';
     const facts = nv
       ? `<span>Developer project, ${esc(it.status)}</span><span>Move-in <b>${esc(it.moveIn)}</b></span><span>Features from project page</span>`
       : `<span>${it.market === 'new' ? 'New build' : 'Resale'}, <b>${esc(it.condition)}</b></span>` +
+        (fz && it.developer ? `<span>${esc(it.developer)}</span>` : '') +
         (it.readyDate ? `<span>Ready <b>${esc(it.readyDate)}</b></span>` : '') +
         (it.floor != null ? `<span>Floor ${esc(it.floor)}</span>` : '') +
         (it.energy ? `<span>Energy ${esc(it.energy)}</span>` : '') +
@@ -510,10 +576,12 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     return `<li class="item${isHid ? ' dim' : ''}${it.id === focusId ? ' focus' : ''}" id="${esc(it.id)}">
       ${plaque(it.district)}
       <div class="main">
-        <h3><a href="${esc(it.link)}" target="_blank" rel="noopener">${title}</a>${fresh ? '<span class="tagnew">New</span>' : ''}</h3>
+        <h3><a href="${esc(it.link)}" target="_blank" rel="noopener">${title}</a>${tag ? `<span class="chg">${tag}</span>` : ''}</h3>
         <div class="where">${esc(where || it.district)}</div>
         <div class="facts">${facts}</div>
         <div class="feat">${feats(it)}</div>
+        ${srcs}
+        ${hist.length || it.note ? `<div class="hist">${[...(it.note ? [it.note.charAt(0).toUpperCase() + it.note.slice(1) + '.'] : []), ...hist].map(esc).join('<br>')}</div>` : ''}
         ${it.verify ? `<div class="verify">${esc(it.verify)}</div>` : ''}
         ${rating(it)}
       </div>
@@ -531,6 +599,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     const n = items.length;
     $('count').innerHTML = `${fmt(n)} ${n === 1 ? 'place' : 'places'} <span>of ${fmt(feed.items.length)}</span>`;
     $('fsum').textContent = `${fmt(n)} shown`;
+    $('chgCount').textContent = `(${feed.items.filter(changed).length})`;
     $('list').innerHTML = items.slice(0, shown).map(row).join('');
     $('more').hidden = n <= shown;
     $('empty').hidden = true;
@@ -542,6 +611,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     const id = decodeURIComponent(location.hash.slice(1));
     focusId = id || null;
     if (!feed) return;
+    if (focusId) { const hit = feed.items.find((x) => (x.ids || [x.id]).includes(focusId)); if (hit) focusId = hit.id; }
     if (focusId && !feed.items.some((x) => x.id === focusId)) { setStatus('That listing is no longer in the feed — it was probably sold or withdrawn.', true); focusId = null; }
     render();
     if (focusId) { const el = document.getElementById(focusId); if (el) el.scrollIntoView({ block: 'start' }); }
@@ -550,7 +620,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
 
   (async () => {
     await loadMe();
-    await Promise.all([loadFeed(), loadNotes()]);
+    await Promise.all([loadFeed(), loadNotes(), api('GET', '/api/status').then((s) => { runState = s; renderRun(); }).catch(() => {})]);
     readHash();
     live();
   })();

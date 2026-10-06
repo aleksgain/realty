@@ -8,8 +8,8 @@
   <Privileged>false</Privileged>
   <Support/>
   <Project>https://github.com/OWNER/reality</Project>
-  <Overview>Shared Prague property shortlist: listings pushed by n8n, star ratings and comments in SQLite, live updates in the browser.</Overview>
-  <Category>Tools: HomeAutomation:</Category>
+  <Overview>Prague property board. Checks Sreality, Flatzone developer price lists and novostavby.com on a schedule, filters and ranks listings, and lets two people rate and comment with live updates.</Overview>
+  <Category>Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL/>
   <Icon>https://raw.githubusercontent.com/twitter/twemoji/master/assets/72x72/1f3e0.png</Icon>
@@ -17,9 +17,33 @@
   <PostArgs/>
   <CPUset/>
   <Config Name="Web UI port" Target="8080" Default="8088" Mode="tcp" Description="Port the board is served on. Point the reverse proxy here." Type="Port" Display="always" Required="true" Mask="false">8088</Config>
-  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/reality" Mode="rw" Description="SQLite database (ratings, comments) and the current feed.json." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/reality</Config>
-  <Config Name="Ingest token" Target="INGEST_TOKEN" Default="" Mode="" Description="Long random string. n8n sends it as 'Authorization: Bearer ...' when pushing the feed." Type="Variable" Display="always" Required="true" Mask="true"></Config>
-  <Config Name="Users" Target="USERS" Default="Alex,Partner" Mode="" Description="Comma-separated names for the 'Rating as' picker. Ignored when a user header is set." Type="Variable" Display="always" Required="false" Mask="false">Alex,Partner</Config>
-  <Config Name="SSO user header" Target="USER_HEADER" Default="" Mode="" Description="Optional, e.g. X-authentik-username. Only set this if the port is reachable solely through the proxy." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
-  <Config Name="Feed poll interval (ms)" Target="FEED_POLL_MS" Default="15000" Mode="" Description="How often to check feed.json for changes made outside the API." Type="Variable" Display="advanced" Required="false" Mask="false">15000</Config>
+  <Config Name="Data" Target="/data" Default="/mnt/user/appdata/reality" Mode="rw" Description="SQLite database: listings, change history, ratings, comments, run log." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/reality</Config>
+  <Config Name="Update schedule (cron)" Target="CRON" Default="0 7,19 * * *" Mode="" Description="Five-field cron in the time zone below. Default: 07:00 and 19:00." Type="Variable" Display="always" Required="false" Mask="false">0 7,19 * * *</Config>
+  <Config Name="Time zone" Target="TIMEZONE" Default="Europe/Prague" Mode="" Description="IANA zone used for the schedule." Type="Variable" Display="always" Required="false" Mask="false">Europe/Prague</Config>
+  <Config Name="Users" Target="USERS" Default="Alex,Partner" Mode="" Description="Comma-separated names for the Rating as picker. Ignored when an SSO user header is set." Type="Variable" Display="always" Required="false" Mask="false">Alex,Partner</Config>
+  <Config Name="Max price (CZK)" Target="PRICE_MAX" Default="15000000" Mode="" Description="Upper price limit for Sreality listings." Type="Variable" Display="always" Required="false" Mask="false">15000000</Config>
+  <Config Name="Min area (m2)" Target="AREA_MIN" Default="50" Mode="" Description="Minimum usable area." Type="Variable" Display="always" Required="false" Mask="false">50</Config>
+  <Config Name="Required features" Target="REQUIRED" Default="parking,outdoor,cellar" Mode="" Description="Any of: parking, outdoor, cellar, ac, ev. A listing must have all of them." Type="Variable" Display="always" Required="false" Mask="false">parking,outdoor,cellar</Config>
+  <Config Name="Latest completion date" Target="LATEST_COMPLETION" Default="2027-03-31" Mode="" Description="Under-construction listings finishing after this are dropped." Type="Variable" Display="always" Required="false" Mask="false">2027-03-31</Config>
+  <Config Name="Move-in date" Target="MOVE_IN_DATE" Default="2027-07-01" Mode="" Description="Shown on the page for context." Type="Variable" Display="always" Required="false" Mask="false">2027-07-01</Config>
+  <Config Name="District scores" Target="SCORE_DISTRICTS" Default="Praha 7:40,Praha 6:25,Praha 8:15" Mode="" Description="District:points pairs for ranking." Type="Variable" Display="advanced" Required="false" Mask="false">Praha 7:40,Praha 6:25,Praha 8:15</Config>
+  <Config Name="AC score" Target="SCORE_AC" Default="25" Mode="" Description="Points for air conditioning mentioned." Type="Variable" Display="advanced" Required="false" Mask="false">25</Config>
+  <Config Name="AC prep score" Target="SCORE_AC_PREP" Default="12" Mode="" Description="Points for prepared-for-AC." Type="Variable" Display="advanced" Required="false" Mask="false">12</Config>
+  <Config Name="EV charging score" Target="SCORE_EV" Default="10" Mode="" Description="Points for EV charging mentioned." Type="Variable" Display="advanced" Required="false" Mask="false">10</Config>
+  <Config Name="New build score" Target="SCORE_NEW_BUILD" Default="5" Mode="" Description="Points for new builds over resale." Type="Variable" Display="advanced" Required="false" Mask="false">5</Config>
+  <Config Name="Ownership" Target="OWNERSHIP" Default="1" Mode="" Description="1 = osobní vlastnictví only, 0 = any." Type="Variable" Display="advanced" Required="false" Mask="false">1</Config>
+  <Config Name="Sreality regions" Target="SREALITY_REGIONS" Default="10" Mode="" Description="Comma-separated region IDs. 10 = Praha, 11 = Středočeský kraj." Type="Variable" Display="advanced" Required="false" Mask="false">10</Config>
+  <Config Name="Sreality new-build conditions" Target="SREALITY_NEW_CONDITIONS" Default="6,4" Mode="" Description="6 = novostavba, 4 = ve výstavbě, 5 = projekt." Type="Variable" Display="advanced" Required="false" Mask="false">6,4</Config>
+  <Config Name="Sreality resale conditions" Target="SREALITY_RESALE_CONDITIONS" Default="1,9" Mode="" Description="1 = velmi dobrý, 9 = po rekonstrukci, 2 = dobrý. Empty disables resale." Type="Variable" Display="advanced" Required="false" Mask="false">1,9</Config>
+  <Config Name="Flatzone enabled" Target="FLATZONE_ENABLED" Default="true" Mode="" Description="Include unit-level developer price lists from flatzone.cz." Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="Flatzone project refresh (days)" Target="FLATZONE_PROJECT_REFRESH_DAYS" Default="7" Mode="" Description="How often to re-read project details (completion dates, parking, cellars)." Type="Variable" Display="advanced" Required="false" Mask="false">7</Config>
+  <Config Name="Duplicate match distance (m)" Target="DEDUPE_METERS" Default="150" Mode="" Description="Listings closer than this with the same layout, floor and size are merged." Type="Variable" Display="advanced" Required="false" Mask="false">150</Config>
+  <Config Name="Duplicate area tolerance (m2)" Target="DEDUPE_AREA_TOLERANCE" Default="2" Mode="" Description="Allowed area difference between a developer listing and a portal listing of the same flat." Type="Variable" Display="advanced" Required="false" Mask="false">2</Config>
+  <Config Name="Novostavby.com enabled" Target="NOVOSTAVBY_ENABLED" Default="true" Mode="" Description="Include developer projects from novostavby.com." Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="Novostavby locations" Target="NOVOSTAVBY_LOCATIONS" Default="2530,1386,1519" Mode="" Description="Term IDs: 2530 Praha, 1386 Praha-východ, 1519 Praha-západ." Type="Variable" Display="advanced" Required="false" Mask="false">2530,1386,1519</Config>
+  <Config Name="Novostavby move-in years" Target="NOVOSTAVBY_YEARS" Default="ihned:365,2026:3378,2027:3410" Mode="" Description="label:termID pairs." Type="Variable" Display="advanced" Required="false" Mask="false">ihned:365,2026:3378,2027:3410</Config>
+  <Config Name="Re-check listings after (days)" Target="REEVALUATE_DAYS" Default="14" Mode="" Description="Re-read unchanged listings this old to catch edited details." Type="Variable" Display="advanced" Required="false" Mask="false">14</Config>
+  <Config Name="Min minutes between manual checks" Target="MIN_RUN_GAP_MINUTES" Default="10" Mode="" Description="Rate limit for the Check now button." Type="Variable" Display="advanced" Required="false" Mask="false">10</Config>
+  <Config Name="Run on first start" Target="RUN_ON_START" Default="true" Mode="" Description="Run a check at startup if none has succeeded yet." Type="Variable" Display="advanced" Required="false" Mask="false">true</Config>
+  <Config Name="SSO user header" Target="USER_HEADER" Default="" Mode="" Description="Optional, e.g. X-authentik-username. Only set if the port is reachable solely through the proxy." Type="Variable" Display="advanced" Required="false" Mask="false"></Config>
 </Container>
