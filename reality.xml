@@ -1,14 +1,14 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>reality</Name>
-  <Repository>ghcr.io/OWNER/reality:latest</Repository>
-  <Registry>https://github.com/OWNER/reality/pkgs/container/reality</Registry>
+  <Repository>ghcr.io/aleksgain/realty:latest</Repository>
+  <Registry>https://github.com/aleksgain/realty/pkgs/container/realty</Registry>
   <Network>bridge</Network>
   <Shell>sh</Shell>
   <Privileged>false</Privileged>
   <Support/>
-  <Project>https://github.com/OWNER/reality</Project>
-  <Overview>Prague property board. Checks Sreality, Flatzone developer price lists and novostavby.com on a schedule, filters and ranks listings, and lets two people rate and comment with live updates.</Overview>
+  <Project>https://github.com/aleksgain/realty</Project>
+  <Overview>Prague property board. Checks Sreality, Flatzone developer price lists and novostavby.com on a schedule for apartments and houses, filters and ranks listings, and lets two people rate and comment with live updates.</Overview>
   <Category>Tools:</Category>
   <WebUI>http://[IP]:[PORT:8080]/</WebUI>
   <TemplateURL/>
@@ -26,6 +26,18 @@
   <Config Name="Required features" Target="REQUIRED" Default="parking,outdoor,cellar" Mode="" Description="Any of: parking, outdoor, cellar, ac, ev. A listing must have all of them." Type="Variable" Display="always" Required="false" Mask="false">parking,outdoor,cellar</Config>
   <Config Name="Latest completion date" Target="LATEST_COMPLETION" Default="2027-03-31" Mode="" Description="Under-construction listings finishing after this are dropped." Type="Variable" Display="always" Required="false" Mask="false">2027-03-31</Config>
   <Config Name="Move-in date" Target="MOVE_IN_DATE" Default="2027-07-01" Mode="" Description="Shown on the page for context." Type="Variable" Display="always" Required="false" Mask="false">2027-07-01</Config>
+  <Config Name="Houses enabled" Target="HOUSE_ENABLED" Default="true" Mode="" Description="Also search family houses around a centre point." Type="Variable" Display="always" Required="false" Mask="false">true</Config>
+  <Config Name="House search centre (lat,lon)" Target="HOUSE_CENTER" Default="50.0884,14.4286" Mode="" Description="Centre of the house radius. Default: Náměstí Republiky." Type="Variable" Display="always" Required="false" Mask="false">50.0884,14.4286</Config>
+  <Config Name="House search centre name" Target="HOUSE_CENTER_LABEL" Default="Náměstí Republiky" Mode="" Description="Shown on the page next to distances." Type="Variable" Display="advanced" Required="false" Mask="false">Náměstí Republiky</Config>
+  <Config Name="House radius (km)" Target="HOUSE_RADIUS_KM" Default="20" Mode="" Description="Straight-line distance from the centre." Type="Variable" Display="always" Required="false" Mask="false">20</Config>
+  <Config Name="House max price (CZK)" Target="HOUSE_PRICE_MAX" Default="15000000" Mode="" Description="Defaults to the apartment limit." Type="Variable" Display="always" Required="false" Mask="false">15000000</Config>
+  <Config Name="House min area (m2)" Target="HOUSE_AREA_MIN" Default="50" Mode="" Description="Minimum usable area of the house." Type="Variable" Display="advanced" Required="false" Mask="false">50</Config>
+  <Config Name="House min plot (m2)" Target="HOUSE_PLOT_MIN" Default="1" Mode="" Description="Minimum land. 1 = any land; houses with no plot stated are dropped." Type="Variable" Display="always" Required="false" Mask="false">1</Config>
+  <Config Name="House required features" Target="HOUSE_REQUIRED" Default="garage" Mode="" Description="Any of: garage, parking, ac, ev." Type="Variable" Display="always" Required="false" Mask="false">garage</Config>
+  <Config Name="House Sreality regions" Target="HOUSE_SREALITY_REGIONS" Default="10,11" Mode="" Description="10 = Praha, 11 = Středočeský kraj. The radius is applied on top." Type="Variable" Display="advanced" Required="false" Mask="false">10,11</Config>
+  <Config Name="House Sreality types" Target="HOUSE_SREALITY_TYPES" Default="37,39,40,54" Mode="" Description="37 rodinný, 39 vila, 40 na klíč, 54 vícegenerační; 33 chata and 43 chalupa are off by default." Type="Variable" Display="advanced" Required="false" Mask="false">37,39,40,54</Config>
+  <Config Name="House Flatzone areas" Target="HOUSE_FLATZONE_AREAS" Default="city:Praha,region:Středočeský kraj" Mode="" Description="Where to look for developer houses before the radius is applied." Type="Variable" Display="advanced" Required="false" Mask="false">city:Praha,region:Středočeský kraj</Config>
+  <Config Name="House distance score" Target="HOUSE_SCORE_DISTANCE" Default="40" Mode="" Description="Points at the centre, falling to 0 at the radius edge." Type="Variable" Display="advanced" Required="false" Mask="false">40</Config>
   <Config Name="District scores" Target="SCORE_DISTRICTS" Default="Praha 7:40,Praha 6:25,Praha 8:15" Mode="" Description="District:points pairs for ranking." Type="Variable" Display="advanced" Required="false" Mask="false">Praha 7:40,Praha 6:25,Praha 8:15</Config>
   <Config Name="AC score" Target="SCORE_AC" Default="25" Mode="" Description="Points for air conditioning mentioned." Type="Variable" Display="advanced" Required="false" Mask="false">25</Config>
   <Config Name="AC prep score" Target="SCORE_AC_PREP" Default="12" Mode="" Description="Points for prepared-for-AC." Type="Variable" Display="advanced" Required="false" Mask="false">12</Config>

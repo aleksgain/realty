@@ -119,6 +119,9 @@ li.item.dim { opacity: .45; }
 .media .plaque.mini .pr { font-size: 8.5px; }
 .media .plaque.mini .num { font-size: 20px; margin-top: 1px; }
 .media .plaque.mini .num.small { font-size: 11px; margin-top: 3px; }
+.plaque.house .pr { max-width: 11ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plaque.house .num.small { font-size: 16px; white-space: nowrap; }
+.media .plaque.mini.house .num.small { font-size: 13px; }
 .cbtn {
   position: absolute; top: 50%; transform: translateY(-50%); width: 32px; height: 32px; border-radius: 50%;
   border: 0; background: rgba(255,255,255,.88); color: #1C2430; cursor: pointer; display: grid; place-items: center;
@@ -232,6 +235,14 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
         <summary><span>Filters</span><span id="fsum"></span></summary>
 
         <div class="fgroup">
+          <h2>Type</h2>
+          <div class="seg" id="kind">
+            <button data-v="flat" aria-pressed="true">Apartments</button>
+            <button data-v="house" aria-pressed="true">Houses</button>
+          </div>
+        </div>
+
+        <div class="fgroup">
           <h2>Show</h2>
           <div class="seg" id="src">
             <button data-v="all" aria-pressed="true">All</button>
@@ -242,7 +253,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
         </div>
 
         <div class="fgroup">
-          <h2>District</h2>
+          <h2>District (apartments)</h2>
           <div class="seg" id="dist">
             <button data-v="Praha 7" aria-pressed="true">Praha 7</button>
             <button data-v="Praha 6" aria-pressed="true">Praha 6</button>
@@ -256,7 +267,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
           <label class="check"><input type="checkbox" id="reqAc"> Air conditioning</label>
           <label class="check"><input type="checkbox" id="reqAcPrep"> Count AC prep as AC</label>
           <label class="check"><input type="checkbox" id="reqEv"> EV charging</label>
-          <p class="fnote">Parking, outdoor space and a cellar are already required for every flat listed here.</p>
+          <p class="fnote">Parking, outdoor space and a cellar are already required for every apartment here, and a garage and land for every house.</p>
         </div>
 
         <div class="fgroup">
@@ -264,6 +275,11 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
             <label class="field">Max price (M Kč)<input type="number" id="maxPrice" min="1" step="0.5" inputmode="decimal"></label>
             <label class="field">Min area (m²)<input type="number" id="minArea" min="0" step="5" inputmode="numeric"></label>
           </div>
+          <div class="row2" style="margin-top:8px">
+            <label class="field">Max distance (km)<input type="number" id="maxKm" min="1" step="1" inputmode="numeric"></label>
+            <label class="field">Min plot (m²)<input type="number" id="minPlot" min="0" step="50" inputmode="numeric"></label>
+          </div>
+          <p class="fnote">Distance and plot apply to houses only.</p>
         </div>
 
         <div class="fgroup">
@@ -275,6 +291,8 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
               <option value="area">Area, large to small</option>
               <option value="fresh">Newest first</option>
               <option value="ours">Our rating</option>
+              <option value="distance">Distance from centre (houses)</option>
+              <option value="plot">Plot, large to small (houses)</option>
             </select>
           </label>
         </div>
@@ -327,7 +345,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
   const st = Object.assign({
     src: 'all', dist: ['Praha 7', 'Praha 6', 'Praha 8', 'other'],
     reqAc: false, reqAcPrep: false, reqEv: false, maxPrice: 15, minArea: 50,
-    sort: 'score', rated: 'any', showHidden: false, onlyChanged: false,
+    sort: 'score', rated: 'any', showHidden: false, onlyChanged: false, kind: ['flat', 'house'], maxKm: null, minPlot: null,
   }, store.get('filters', {}));
   let shown = PAGE, feed = null, bound = false, me = null, focusId = null, pendingRender = false, runState = null;
   // "What's new" baseline: the previous visit in this browser. Before any visit, the last 3 days count as new.
@@ -444,15 +462,20 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     feed = data;
     const s = data.stats || {}, c = data.criteria || {};
     const upd = data.updated ? new Date(data.updated).toLocaleString('cs-CZ', { dateStyle: 'medium', timeStyle: 'short' }) : 'unknown';
-    $('sub').innerHTML = `Apartments up to <strong>${fmt((c.priceTo || 0) / 1e6)} M Kč</strong>, <strong>${c.areaFrom || '?'} m²+</strong>, finished by <strong>${esc(c.latestCompletion || '?')}</strong> for a move-in around ${esc(c.moveInDeadline || '?')}. Updated ${esc(upd)}.`;
-    $('foot').textContent = `${fmt(s.flatzoneMatches)} of ${fmt(s.flatzoneUnits)} units from developer price lists (Flatzone) and ${fmt(s.srealityMatches)} of ${fmt(s.srealityCandidates)} Sreality listings pass the requirements; ${fmt(s.duplicatesMerged)} duplicates were merged. ${fmt(s.novostavbyProjects)} Novostavby.com projects not covered by Flatzone are listed as whole projects; their features are what the project page mentions.`;
+    $('sub').innerHTML = `Apartments up to <strong>${fmt((c.priceTo || 0) / 1e6)} M Kč</strong>, <strong>${c.areaFrom || '?'} m²+</strong>, finished by <strong>${esc(c.latestCompletion || '?')}</strong> for a move-in around ${esc(c.moveInDeadline || '?')}.` +
+      (c.house ? ` Houses up to <strong>${fmt(c.house.priceTo / 1e6)} M Kč</strong> with a garage and land, within <strong>${c.house.radiusKm} km</strong> of ${esc(c.house.centerLabel)}.` : '') +
+      ` Updated ${esc(upd)}.`;
+    $('foot').textContent = `${fmt(s.flats)} apartments and ${fmt(s.houses)} houses. ${fmt(s.flatzoneMatches)} of ${fmt(s.flatzoneUnits)} units from developer price lists (Flatzone) and ${fmt(s.srealityMatches)} of ${fmt(s.srealityCandidates)} Sreality listings pass the requirements; ${fmt(s.duplicatesMerged)} duplicates were merged. ${fmt(s.novostavbyProjects)} Novostavby.com projects not covered by Flatzone are listed as whole projects; their features are what the project page mentions.`;
+    const hc = c.house;
+    if (!hc) { st.kind = ['flat']; document.querySelector('#kind').closest('.fgroup').hidden = true; }
+    if (hc && st.maxKm == null) st.maxKm = hc.radiusKm;
     if (!bound) { bindControls(); bound = true; }
     scheduleRender();
   }
 
   // ---------- controls ----------
   function bindControls() {
-    for (const [id, multi] of Object.entries({ src: false, dist: true })) {
+    for (const [id, multi] of Object.entries({ src: false, dist: true, kind: true })) {
       const box = $(id);
       const sync = () => box.querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', multi ? st[id].includes(b.dataset.v) : st[id] === b.dataset.v));
       sync();
@@ -467,7 +490,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
       $(id).checked = !!st[id];
       $(id).addEventListener('change', () => { st[id] = $(id).checked; refilter(); });
     }
-    for (const id of ['maxPrice', 'minArea']) {
+    for (const id of ['maxPrice', 'minArea', 'maxKm', 'minPlot']) {
       $(id).value = st[id] ?? '';
       $(id).addEventListener('input', () => { const v = parseFloat($(id).value); st[id] = isNaN(v) ? null : v; refilter(); });
     }
@@ -535,10 +558,13 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
   const ours = (it) => { const v = Object.values(notesFor(it).ratings); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
   function passes(it) {
     if (it.id === focusId) return true;
-    const isNv = it.source === 'novostavby';
+    const isNv = it.source === 'novostavby', house = it.kind === 'house';
+    if (!st.kind.includes(house ? 'house' : 'flat')) return false;
     const kind = isNv ? 'novostavby' : it.market;
     if (st.src !== 'all' && st.src !== kind) return false;
-    if (!st.dist.includes(PRIORITY.includes(it.district) ? it.district : 'other')) return false;
+    if (!house && !st.dist.includes(PRIORITY.includes(it.district) ? it.district : 'other')) return false;
+    if (house && st.maxKm && it.distanceKm != null && it.distanceKm > st.maxKm) return false;
+    if (house && st.minPlot && !(it.plot >= st.minPlot)) return false;
     const f = it.features || {};
     if (st.reqAc && !(f.ac === 'yes' || (st.reqAcPrep && f.ac === 'prep'))) return false;
     if (st.reqEv && !f.ev) return false;
@@ -562,6 +588,8 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
       case 'area': return (b.area ?? -1) - (a.area ?? -1);
       case 'fresh': return (b.firstSeen || '').localeCompare(a.firstSeen || '') || b.score - a.score;
       case 'ours': return (ours(b) ?? -1) - (ours(a) ?? -1) || b.score - a.score;
+      case 'distance': return (a.distanceKm ?? big) - (b.distanceKm ?? big);
+      case 'plot': return (b.plot ?? -1) - (a.plot ?? -1);
       default: return b.score - a.score || (a.pricePerM2 ?? big) - (b.pricePerM2 ?? big);
     }
   }
@@ -576,15 +604,23 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
   const CHEV_L = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 3 5 8l5 5"/></svg>';
   const CHEV_R = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 3 5 5-5 5"/></svg>';
   const carIdx = new Map();   // listing id -> photo index, so live re-renders keep your place
+  const place = (d) => String(d || '').replace(/^Praha, okres (Praha \d+)$/, '$1');
+  const uniq = (parts) => { const seen = new Set(); return parts.join(', ').split(/,\s*/).filter((p) => p && !seen.has(p) && seen.add(p)).join(', '); };
+  function badge(it, mini) {
+    if (it.kind !== 'house') return plaque(it.district, mini);
+    const town = place(it.district).split(',')[0];
+    const dist = it.distanceKm != null ? `${String(it.distanceKm).replace('.', ',')} km` : '?';
+    return `<div class="plaque blue${mini ? ' mini' : ''} house" aria-label="${esc(town)}, ${esc(dist)} from centre"><span class="pr">${esc(town)}</span><span class="num small">${esc(dist)}</span></div>`;
+  }
   function media(it) {
     const imgs = it.images || [];
-    if (!imgs.length) return `<div class="media noimg">${plaque(it.district)}</div>`;
+    if (!imgs.length) return `<div class="media noimg">${badge(it)}</div>`;
     const many = imgs.length > 1;
     return `<div class="media" data-id="${esc(it.id)}">
       <div class="car" data-id="${esc(it.id)}" tabindex="0" aria-label="Photos, ${imgs.length}">
         ${imgs.map((im, i) => `<img src="${esc(im.t)}" data-i="${i}" alt="Photo ${i + 1} of ${imgs.length}" loading="lazy" decoding="async" referrerpolicy="no-referrer">`).join('')}
       </div>
-      ${plaque(it.district, true)}
+      ${badge(it, true)}
       ${many ? `<button type="button" class="cbtn cprev" data-car="-1" aria-label="Previous photo">${CHEV_L}</button><button type="button" class="cbtn cnext" data-car="1" aria-label="Next photo">${CHEV_R}</button>` : ''}
       ${many ? `<span class="ccount">${(carIdx.get(it.id) || 0) + 1} / ${imgs.length}</span>` : ''}
     </div>`;
@@ -593,6 +629,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     const f = it.features || {}, nv = it.source === 'novostavby';
     const chip = (on, label, bonus) => `<span class="f${on ? ' on' : (nv ? '' : ' off')}${bonus ? ' bonus' : ''}">${label}</span>`;
     const ac = f.ac === 'yes' ? chip(true, 'AC', true) : f.ac === 'prep' ? chip(true, 'AC prep', false) : chip(false, 'AC', true);
+    if (it.kind === 'house') return chip(f.garage, 'Garage') + ac + chip(f.ev, 'EV charging', true);
     return chip(f.parking, 'Parking') + chip(f.outdoor, 'Balcony, terrace or garden') + chip(f.cellar, 'Cellar') + ac + chip(f.ev, 'EV charging', true);
   }
   function rating(it) {
@@ -620,18 +657,21 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
       .map((e) => `Was ${e.from} until ${new Date(e.at).toLocaleDateString('cs-CZ')}`);
     const hist = [...priceHist, ...statusHist];
     const fz = it.source === 'flatzone';
-    const title = nv ? esc(it.title) : `${esc(it.layout)}, ${it.area ?? '?'} m²`;
-    const where = nv ? [it.subarea, it.type].filter(Boolean).join(', ') : fz ? [it.project, it.subarea].filter(Boolean).join(', ') : it.subarea;
+    const house = it.kind === 'house';
+    const houseName = (l) => ({ 'Rodinný': 'Family house', 'Vila': 'Villa', 'Na klíč': 'Turnkey house', 'Vícegenerační dům': 'Multi-generation house' }[l] || (String(l).startsWith('dům') ? 'House' + String(l).slice(3) : l));
+    const title = nv ? esc(it.title) : house ? `${esc(houseName(it.layout))}, ${it.area ?? '?'} m²` : `${esc(it.layout)}, ${it.area ?? '?'} m²`;
+    const where = nv ? [it.subarea, it.type].filter(Boolean).join(', ') : fz ? [it.project, house ? it.district : it.subarea].filter(Boolean).join(', ') : house ? uniq([place(it.district), it.subarea]) : it.subarea;
     const SRC = { flatzone: 'Developer site', sreality: 'Sreality', novostavby: 'Novostavby.com' };
     const srcs = (it.sources || []).length > 1 || fz
       ? `<div class="srcs">Listed on ${(it.sources || []).map((s) => `<a href="${esc(s.link)}" target="_blank" rel="noopener">${SRC[s.source] || s.source}</a>${s.price ? ` (${fmt(s.price)} Kč)` : ''}`).join(', ')}</div>` : '';
     const facts = nv
       ? `<span>Developer project, ${esc(it.status)}</span><span>Move-in <b>${esc(it.moveIn)}</b></span><span>Features from project page</span>`
-      : `<span>${it.market === 'new' ? 'New build' : 'Resale'}, <b>${esc(it.condition)}</b></span>` +
+      : (house ? `<span>Plot <b>${it.plot ? fmt(it.plot) + ' m²' : 'not stated'}</b></span>` + (it.distanceKm != null ? `<span><b>${String(it.distanceKm).replace('.', ',')} km</b> from ${esc(feed.criteria.house?.centerLabel || 'centre')}</span>` : '') : '') +
+        `<span>${it.market === 'new' ? 'New build' : 'Resale'}, <b>${esc(it.condition)}</b></span>` +
         (fz && it.developer ? `<span>${esc(it.developer)}</span>` : '') +
         (it.readyDate ? `<span>Ready <b>${esc(it.readyDate)}</b></span>` : '') +
         (it.floor != null ? `<span>Floor ${esc(it.floor)}</span>` : '') +
-        (it.energy ? `<span>Energy ${esc(it.energy)}</span>` : '') +
+        (it.energy && it.energy !== '-' ? `<span>Energy ${esc(it.energy)}</span>` : '') +
         `<span>Seen since ${esc(it.firstSeen)}</span>`;
     const money = nv ? `<div class="ppm">Prices on developer site</div>`
       : `<div class="price">${fmt(it.price)} Kč</div><div class="ppm">${fmt(it.pricePerM2)} Kč/m²</div>` +
@@ -667,7 +707,7 @@ footer { color: var(--muted); font-size: 13px; padding: 0 0 40px; }
     const img = e.target; if (!(img instanceof HTMLImageElement)) return;
     const car = img.closest('.car'); if (!car) return;
     img.remove();
-    if (!car.children.length) { const m = car.parentElement; m.classList.add('noimg'); m.innerHTML = plaque(feed.items.find((x) => x.id === m.dataset.id)?.district); }
+    if (!car.children.length) { const m = car.parentElement; m.classList.add('noimg'); const it = feed.items.find((x) => x.id === m.dataset.id); m.innerHTML = it ? badge(it) : ''; }
   }, true);
   function restoreCarousels() {
     document.querySelectorAll('.car').forEach((car) => { const i = carIdx.get(car.dataset.id); if (i) car.scrollLeft = i * car.clientWidth; });

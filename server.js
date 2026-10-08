@@ -7,7 +7,7 @@ const path = require('node:path');
 const { DatabaseSync } = require('node:sqlite');
 const cfg = require('./lib/config');
 const { parseCron, matches, nextRun } = require('./lib/cron');
-const { fetchNovostavby, searchSreality, evaluateSreality, searchFlatzone, fetchFlatzoneProject, flatzoneItem, sleep } = require('./lib/scraper');
+const { fetchNovostavby, searchSreality, evaluateSreality, searchFlatzone, fetchFlatzoneProject, flatzoneItem, sleep, km } = require('./lib/scraper');
 
 const PUBLIC = path.join(__dirname, 'public');
 const cron = parseCron(cfg.cron);
@@ -126,7 +126,7 @@ async function runUpdate(trigger) {
     tx(() => {
       for (const [hash, c] of cands) {
         const id = `sr-${hash}`, row = q.listing.get(id);
-        const upgrade = row && JSON.parse(row.data).v !== 3;   // older rows lack GPS (duplicate matching) or photos
+        const upgrade = row && JSON.parse(row.data).v !== 4;   // older rows lack GPS, photos or house fields
         const stale = row && (upgrade || ((!row.last_eval || row.last_eval < staleBefore) && reeval < cfg.sreality.reevaluatePerRun));
         if (row && row.price === c.e.price_czk && !stale) {
           if (!row.active) q.event.run(id, now, 'back', null);
@@ -163,7 +163,7 @@ async function runUpdate(trigger) {
       stats.flatzoneUnits = units.size;
       const fresh = new Date(Date.now() - cfg.flatzone.projectRefreshDays * 864e5).toISOString();
       const pids = [...new Set([...units.values()].map((u) => u.projectId))];
-      const need = pids.filter((id) => { const r = q.fzProject.get(id); return !r || r.fetched < fresh; });
+      const need = pids.filter((id) => { const r = q.fzProject.get(id); return !r || r.fetched < fresh || JSON.parse(r.data).v !== 2; });
       for (let i = 0; i < need.length; i += 4) {
         phase(`Reading Flatzone projects ${Math.min(i + 4, need.length)} of ${need.length}`);
         const got = await Promise.all(need.slice(i, i + 4).map((id) => fetchFlatzoneProject(cfg, id).catch(() => null)));
@@ -204,7 +204,10 @@ async function runUpdate(trigger) {
 let feedCache = null;
 function scoreOf(it) {
   const S = cfg.scoring, f = it.features || {};
-  return (S.district[it.district] || 0) + (f.ac === 'yes' ? S.ac : f.ac === 'prep' ? S.acPrep : 0) + (f.ev ? S.ev : 0) + (it.market === 'new' ? S.newBuild : 0);
+  const place = it.kind === 'house'
+    ? (it.distanceKm == null ? 0 : Math.round(cfg.house.scoreDistance * Math.max(0, 1 - it.distanceKm / cfg.house.radiusKm)))
+    : S.district[it.district] || 0;
+  return place + (f.ac === 'yes' ? S.ac : f.ac === 'prep' ? S.acPrep : 0) + (f.ev ? S.ev : 0) + (it.market === 'new' ? S.newBuild : 0);
 }
 const norm = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
   .replace(/\b(rezidence|residence|bydleni|projekt|etapa|faze|i{1,3}|iv|v)\b/g, '').replace(/[^a-z0-9]/g, '');
@@ -218,7 +221,14 @@ function metres(a, b) {
 // Two developer price-list units are never the same flat: they are distinct units by definition.
 function sameFlat(a, b) {
   if (a.source === 'flatzone' && b.source === 'flatzone') return false;
-  if (!a.gps || !b.gps || a.layout !== b.layout || !a.area || !b.area) return false;
+  if ((a.kind || 'flat') !== (b.kind || 'flat') || !a.gps || !b.gps || !a.area || !b.area) return false;
+  if (a.kind === 'house') {
+    // Houses in one development are near-identical; only merge on a practically identical price and size.
+    if (Math.abs(a.area - b.area) > cfg.dedupe.areaTolerance) return false;
+    if (!a.price || !b.price || Math.abs(a.price - b.price) / Math.max(a.price, b.price) > 0.01) return false;
+    return metres(a.gps, b.gps) <= 60;
+  }
+  if (a.layout !== b.layout) return false;
   if (a.floor != null && b.floor != null && a.floor !== b.floor) return false;
   const bothSr = a.source === 'sreality' && b.source === 'sreality';
   const areaTol = bothSr ? 0.5 : cfg.dedupe.areaTolerance;     // agencies copy the same figure; developers vs portals round differently
@@ -237,17 +247,29 @@ function buildFeed() {
     evs.get(e.listing_id).push({ at: e.at, kind: e.kind, ...(e.detail ? JSON.parse(e.detail) : {}) });
   }
   const units = [], projects = [], fzProjectNames = new Set();
-  const counts = { srealityCandidates: 0, srealityMatches: 0, flatzoneUnits: 0, flatzoneMatches: 0, novostavbyProjects: 0 };
+  const counts = { srealityCandidates: 0, srealityMatches: 0, flatzoneUnits: 0, flatzoneMatches: 0, novostavbyProjects: 0, houses: 0, flats: 0 };
+  const H = cfg.house;
   for (const row of q.activeAll.all()) {
     const it = JSON.parse(row.data);
+    it.kind = it.kind || 'flat';
     it.firstSeen = row.first_seen;
     it.history = evs.get(it.id) || [];
-    if (it.source === 'novostavby') { projects.push(it); continue; }
+    if (it.source === 'novostavby') { if (it.kind === 'house' && !H.enabled) continue; projects.push(it); continue; }
     if (it.source === 'flatzone') { counts.flatzoneUnits++; fzProjectNames.add(norm(it.project)); } else counts.srealityCandidates++;
-    const missing = cfg.filters.required.filter((r) => !it.features?.[r]);
-    if (it.dateExcluded || missing.length) continue;
-    if (it.price > cfg.filters.priceTo || (it.area && it.area < cfg.filters.areaFrom)) continue;
+    if (it.kind === 'house') {
+      if (!H.enabled) continue;
+      it.distanceKm = it.gps ? Math.round(km(H.center, it.gps) * 10) / 10 : null;
+      if (it.distanceKm != null && it.distanceKm > H.radiusKm) continue;
+      if (H.required.some((r) => !it.features?.[r]) || it.dateExcluded) continue;
+      if (it.price > H.priceTo || (it.area && it.area < H.areaFrom)) continue;
+      if (it.plot != null && it.plot < Math.max(1, H.plotFrom)) continue;
+      if (it.source === 'sreality' && !it.plot) continue;   // no land, or none stated
+    } else {
+      if (cfg.filters.required.some((r) => !it.features?.[r]) || it.dateExcluded) continue;
+      if (it.price > cfg.filters.priceTo || (it.area && it.area < cfg.filters.areaFrom)) continue;
+    }
     counts[it.source === 'flatzone' ? 'flatzoneMatches' : 'srealityMatches']++;
+    counts[it.kind === 'house' ? 'houses' : 'flats']++;
     units.push(it);
   }
 
@@ -279,7 +301,7 @@ function buildFeed() {
     const prices = history.filter((e) => e.kind === 'price');
     const changes = history.filter((e) => e.kind !== 'gone');
     const features = { ...main.features };
-    for (const g of group) for (const k of ['parking', 'outdoor', 'cellar', 'ev']) features[k] = features[k] || g.features[k];
+    for (const g of group) for (const k of ['parking', 'outdoor', 'cellar', 'ev', 'garage']) features[k] = features[k] || g.features[k];
     if (group.some((g) => g.features.ac === 'yes')) features.ac = 'yes';
     else if (group.some((g) => g.features.ac === 'prep')) features.ac = 'prep';
     const out = { ...main, features };
@@ -289,6 +311,7 @@ function buildFeed() {
       ids: group.map((g) => g.id),
       sources: group.map((g) => ({ id: g.id, source: g.source, link: g.link, price: g.price, developer: g.developer || null })),
       readyDate: group.map((g) => g.readyDate).find(Boolean) || null,
+      plot: group.map((g) => g.plot).find(Boolean) || null,
       images: (group.find((g) => g.images?.length) || {}).images || [],
       verify: group.map((g) => g.verify).find(Boolean) || null,
       score: Math.max(...group.map((g) => scoreOf({ ...g, features }))),
@@ -304,6 +327,7 @@ function buildFeed() {
     const covered = n.length >= 5 && [...fzProjectNames].some((f) => f.length >= 5 && (f === n || f.includes(n) || n.includes(f)));
     if (covered) continue;
     counts.novostavbyProjects++;
+    counts[p.kind === 'house' ? 'houses' : 'flats']++;
     const changes = p.history.filter((e) => e.kind !== 'gone');
     delete p.key;
     items.push({ ...p, ids: [p.id], sources: [{ id: p.id, source: 'novostavby', link: p.link }], score: scoreOf(p),
@@ -313,7 +337,8 @@ function buildFeed() {
   const ok = q.lastOk.get();
   feedCache = {
     updated: ok ? ok.finished : null,
-    criteria: { priceTo: cfg.filters.priceTo, areaFrom: cfg.filters.areaFrom, required: cfg.filters.required, latestCompletion: cfg.latestCompletion, moveInDeadline: cfg.moveInDeadline },
+    criteria: { priceTo: cfg.filters.priceTo, areaFrom: cfg.filters.areaFrom, required: cfg.filters.required, latestCompletion: cfg.latestCompletion, moveInDeadline: cfg.moveInDeadline,
+      house: H.enabled ? { priceTo: H.priceTo, areaFrom: H.areaFrom, plotFrom: H.plotFrom, radiusKm: H.radiusKm, centerLabel: H.centerLabel, required: H.required } : null },
     stats: { ...counts, duplicatesMerged: merged },
     items,
   };
